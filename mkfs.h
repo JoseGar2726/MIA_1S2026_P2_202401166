@@ -109,7 +109,7 @@ namespace CommandMkfs {
         rootInode.i_atime = time(nullptr);
         rootInode.i_ctime = time(nullptr);
         rootInode.i_mtime = time(nullptr);
-        rootInode.i_type = '1';  // Es carpeta
+        rootInode.i_type = '0';  // Es carpeta
         rootInode.i_perm = 664;
         rootInode.i_block[0] = 0;  // Apunta al bloque 0
         
@@ -124,7 +124,7 @@ namespace CommandMkfs {
         usersInode.i_atime = time(nullptr);
         usersInode.i_ctime = time(nullptr);
         usersInode.i_mtime = time(nullptr);
-        usersInode.i_type = '0';  // Es archivo
+        usersInode.i_type = '1';  // Es archivo
         usersInode.i_perm = 664;
         usersInode.i_block[0] = 1;  // Apunta al bloque 1
         

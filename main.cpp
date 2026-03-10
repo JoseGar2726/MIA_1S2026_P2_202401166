@@ -8,7 +8,9 @@
 #include <cctype>  
 #include "fdisk.h"
 #include "mount.h"
-#include "mkfs.h"       
+#include "mkfs.h"    
+#include "login.h"  
+#include "mkgrp.h" 
 
 // Función para convertir string a minúsculas
 std::string toLowerCase(const std::string& str) {
@@ -221,6 +223,46 @@ std::string executeCommand(const std::string& commandLine) {
     //COMANDO MOUNTED
     } else if (cmd == "mounted"){
         return ComandoMount::listMountedPartitions();
+
+    //COMANDO LOGIN
+    } else if (cmd == "login"){
+        std::string usuario = parseParameter(commandLine, "-user");
+        std::string password = parseParameter(commandLine, "-pass");
+        std::string id = parseParameter(commandLine, "-id");
+
+        if(usuario.empty() || password.empty() || id.empty()){
+            return "Error: login requiere los parametros -user, -pass e -id \n"
+                   "Uso login -user=usuario -pass=password -id=id_particion";
+        }
+
+        usuario = removeQuotes(usuario);
+        password = removeQuotes(password);
+
+        return ComandoLogin::execute(usuario, password, id);
+    
+    //COMANDO LOGOUT
+    } else if(cmd == "logout"){
+        if(!Sesion::activo){
+            return "Error: no hay sesion iniciada";
+        }
+
+        std::string usuarioActual = Sesion::usuario;
+
+        Sesion::logout();
+
+        return "Sesion cerrada correctamente - " + usuarioActual + "";
+
+    //COMANDO MKGRP
+    } else if (cmd == "mkgrp"){
+        std::string nombre = parseParameter(commandLine, "-name");
+
+        if(nombre.empty()){
+            return "Error: mkgrp requiere el parametro -name\n"
+                   "Uso: mkgrp -name=nombre";
+        }
+
+        nombre = removeQuotes(nombre);
+        return ComandoMkgrp::execute(nombre);
 
     //COMANDO INFO
     } else if (cmd == "info") {

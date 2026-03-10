@@ -107,7 +107,7 @@ struct Inode {
     time_t i_ctime;                // Fecha de creación
     time_t i_mtime;                // Última fecha de modificación
     int i_block[15];
-    char i_type;                   // Tipo: '0' = archivo, '1' = carpeta
+    char i_type;                   // Tipo: '1' = archivo, '0' = carpeta
     int i_perm;                    // Permisos del archivo/carpeta
 
     Inode() {
@@ -120,7 +120,7 @@ struct Inode {
         for (int i = 0; i < 15; i++) {
             i_block[i] = -1;
         }
-        i_type = '0';
+        i_type = '1';
         i_perm = 664;
     }
 };
