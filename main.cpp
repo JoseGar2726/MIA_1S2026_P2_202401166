@@ -165,7 +165,7 @@ std::string executeCommand(const std::string& commandLine) {
                    "Los parámetros pueden estar en cualquier orden";
         }
 
-        path = removeQuotes("path");
+        path = removeQuotes(path);
 
         if(!validarExtension(path)){
             return "Error: el disco debe tener la extension .mia";
@@ -210,7 +210,7 @@ std::string executeCommand(const std::string& commandLine) {
                    "Uso: rmdisk -path=ruta";
         }
 
-        path = removeQuotes("path");
+        path = removeQuotes(path);
 
         if(!validarExtension(path)){
             return "Error: el disco debe tener la extension .mia";
@@ -301,7 +301,8 @@ std::string executeCommand(const std::string& commandLine) {
         ruta = removeQuotes(ruta);
         nombre = removeQuotes(nombre);
 
-        if(!validarExtension(nombre)){
+        
+        if(!validarExtension(ruta)){
             return "Error: el disco debe tener la extension .mia";
         }
         

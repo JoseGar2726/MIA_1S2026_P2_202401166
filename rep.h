@@ -187,6 +187,7 @@ private:
         return generarImagen(dotCode, outputPath, "MBR");
     }
 
+    // --- REPORTE DISK (Mapeo Físico y Porcentajes Exactos) ---
     static std::string reporteDISK(const std::string& rutaDisco, const std::string& outputPath) {
         std::fstream file(rutaDisco, std::ios::in | std::ios::binary);
         if (!file.is_open()) return "Error: No se pudo abrir el disco para el reporte DISK.";
@@ -201,61 +202,115 @@ private:
         
         dotCode += "    <table border=\"1\" cellborder=\"1\" cellspacing=\"0\" cellpadding=\"10\">\n";
         dotCode += "      <tr>\n";
-        
         dotCode += "        <td bgcolor=\"#d32f2f\"><font color=\"white\"><b>MBR</b></font></td>\n";
 
+        // 1. Extraer y ordenar las particiones activas por su posición física en el disco
+        std::vector<Partition> particiones;
         for (int i = 0; i < 4; i++) {
             if (mbr.mbr_partitions[i].part_status == '1') {
-                
-                double pct = ((double)mbr.mbr_partitions[i].part_size / (double)mbr.mbr_size) * 100.0;
-                std::stringstream streamPct;
-                streamPct << std::fixed << std::setprecision(2) << pct << "%";
-                std::string porcentaje = streamPct.str();
-
-                if (mbr.mbr_partitions[i].part_type == 'P' || mbr.mbr_partitions[i].part_type == 'p') {
-                    
-                    dotCode += "        <td bgcolor=\"#1976d2\"><font color=\"white\"><b>Primaria</b><br/>" + porcentaje + "</font></td>\n";
-                } else if (mbr.mbr_partitions[i].part_type == 'E' || mbr.mbr_partitions[i].part_type == 'e') {
-                    
-                    dotCode += "        <td bgcolor=\"#ffb300\">\n";
-                    dotCode += "          <table border=\"0\" cellborder=\"1\" cellspacing=\"0\" cellpadding=\"5\">\n";
-                    
-                    
-                    std::string logicasStr = "";
-                    int cols = 0;
-                    int nextEbr = mbr.mbr_partitions[i].part_start;
-                    
-                    while (nextEbr != -1) {
-                        EBR ebr;
-                        file.seekg(nextEbr, std::ios::beg);
-                        file.read(reinterpret_cast<char*>(&ebr), sizeof(EBR));
-
-                        if (ebr.part_status == '1') {
-                            double pctLog = ((double)ebr.part_size / (double)mbr.mbr_size) * 100.0;
-                            std::stringstream streamPctLog;
-                            streamPctLog << std::fixed << std::setprecision(2) << pctLog << "%";
-                            
-                            logicasStr += "              <td bgcolor=\"#388e3c\"><font color=\"white\"><b>EBR</b></font></td>\n";
-                            logicasStr += "              <td bgcolor=\"#81c784\"><font color=\"black\"><b>Logica</b><br/>" + streamPctLog.str() + "</font></td>\n";
-                            cols += 2;
-                        }
-                        nextEbr = ebr.part_next;
-                    }
-
-                    if (cols == 0) {
-                        logicasStr = "              <td>Libre</td>\n";
-                        cols = 1;
-                    }
-
-                    dotCode += "            <tr><td colspan=\"" + std::to_string(cols) + "\"><b>Extendida</b><br/>" + porcentaje + "</td></tr>\n";
-                    dotCode += "            <tr>\n" + logicasStr + "            </tr>\n";
-                    dotCode += "          </table>\n";
-                    dotCode += "        </td>\n";
-                }
-            } else {
-                
-                dotCode += "        <td bgcolor=\"#9e9e9e\"><font color=\"white\"><b>Libre</b></font></td>\n";
+                particiones.push_back(mbr.mbr_partitions[i]);
             }
+        }
+        
+        // Ordenar las particiones de menor a mayor part_start
+        std::sort(particiones.begin(), particiones.end(), [](const Partition& a, const Partition& b) {
+            return a.part_start < b.part_start;
+        });
+
+        int posicionActual = sizeof(MBR);
+
+        // 2. Recorrer el disco físicamente calculando particiones y espacios libres
+        for (const auto& part : particiones) {
+            
+            // A. Dibujar espacio libre si hay un hueco ANTES de la partición actual
+            if (part.part_start > posicionActual) {
+                int espacioLibre = part.part_start - posicionActual;
+                double pctLibre = ((double)espacioLibre / (double)mbr.mbr_size) * 100.0;
+                std::stringstream streamPctLibre;
+                streamPctLibre << std::fixed << std::setprecision(2) << pctLibre << "%";
+                dotCode += "        <td bgcolor=\"#9e9e9e\"><font color=\"white\"><b>Libre</b><br/>" + streamPctLibre.str() + "</font></td>\n";
+            }
+
+            // B. Dibujar la partición actual
+            double pct = ((double)part.part_size / (double)mbr.mbr_size) * 100.0;
+            std::stringstream streamPct;
+            streamPct << std::fixed << std::setprecision(2) << pct << "%";
+            std::string porcentaje = streamPct.str();
+
+            if (part.part_type == 'P' || part.part_type == 'p') {
+                dotCode += "        <td bgcolor=\"#1976d2\"><font color=\"white\"><b>Primaria</b><br/>" + porcentaje + "</font></td>\n";
+            } else if (part.part_type == 'E' || part.part_type == 'e') {
+                
+                dotCode += "        <td bgcolor=\"#ffb300\">\n";
+                dotCode += "          <table border=\"0\" cellborder=\"1\" cellspacing=\"0\" cellpadding=\"5\">\n";
+                
+                std::string logicasStr = "";
+                int cols = 0;
+                int nextEbr = part.part_start;
+                int posicionLogicaActual = part.part_start; 
+                
+                while (nextEbr != -1) {
+                    EBR ebr;
+                    file.seekg(nextEbr, std::ios::beg);
+                    file.read(reinterpret_cast<char*>(&ebr), sizeof(EBR));
+
+                    if (ebr.part_status == '1') {
+                        // Calcular espacio libre dentro de la partición extendida (antes del EBR)
+                        if (ebr.part_start > posicionLogicaActual) {
+                            int libreInt = ebr.part_start - posicionLogicaActual;
+                            double pctL = ((double)libreInt / (double)mbr.mbr_size) * 100.0;
+                            std::stringstream spL; spL << std::fixed << std::setprecision(2) << pctL << "%";
+                            logicasStr += "              <td bgcolor=\"#9e9e9e\"><font color=\"white\"><b>Libre</b><br/>" + spL.str() + "</font></td>\n";
+                            cols++;
+                        }
+
+                        double pctLog = ((double)ebr.part_size / (double)mbr.mbr_size) * 100.0;
+                        std::stringstream streamPctLog;
+                        streamPctLog << std::fixed << std::setprecision(2) << pctLog << "%";
+                        
+                        logicasStr += "              <td bgcolor=\"#388e3c\"><font color=\"white\"><b>EBR</b></font></td>\n";
+                        logicasStr += "              <td bgcolor=\"#81c784\"><font color=\"black\"><b>Logica</b><br/>" + streamPctLog.str() + "</font></td>\n";
+                        cols += 2;
+                        
+                        posicionLogicaActual = ebr.part_start + ebr.part_size;
+                    } else if (ebr.part_status == '0' && ebr.part_next == -1) {
+                         break; // Fin de los EBRs
+                    }
+                    nextEbr = ebr.part_next;
+                }
+
+                // C. Espacio libre al final de la partición extendida
+                int finExtendida = part.part_start + part.part_size;
+                if (posicionLogicaActual < finExtendida) {
+                    int libreInt = finExtendida - posicionLogicaActual;
+                    double pctL = ((double)libreInt / (double)mbr.mbr_size) * 100.0;
+                    std::stringstream spL; spL << std::fixed << std::setprecision(2) << pctL << "%";
+                    logicasStr += "              <td bgcolor=\"#9e9e9e\"><font color=\"white\"><b>Libre</b><br/>" + spL.str() + "</font></td>\n";
+                    cols++;
+                }
+
+                if (cols == 0) {
+                    logicasStr = "              <td>Libre</td>\n";
+                    cols = 1;
+                }
+
+                dotCode += "            <tr><td colspan=\"" + std::to_string(cols) + "\"><b>Extendida</b><br/>" + porcentaje + "</td></tr>\n";
+                dotCode += "            <tr>\n" + logicasStr + "            </tr>\n";
+                dotCode += "          </table>\n";
+                dotCode += "        </td>\n";
+            }
+            
+            // Avanzar nuestra posición de lectura en el disco principal
+            posicionActual = part.part_start + part.part_size;
+        }
+
+        // 3. Dibujar espacio libre al FINAL del disco (Si las particiones no ocuparon el 100%)
+        if (posicionActual < mbr.mbr_size) {
+            int espacioLibre = mbr.mbr_size - posicionActual;
+            double pctLibre = ((double)espacioLibre / (double)mbr.mbr_size) * 100.0;
+            std::stringstream streamPctLibre;
+            streamPctLibre << std::fixed << std::setprecision(2) << pctLibre << "%";
+            dotCode += "        <td bgcolor=\"#9e9e9e\"><font color=\"white\"><b>Libre</b><br/>" + streamPctLibre.str() + "</font></td>\n";
         }
 
         dotCode += "      </tr>\n";
