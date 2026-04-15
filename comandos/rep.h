@@ -10,7 +10,7 @@
 #include <iomanip>
 #include <algorithm>
 #include "mount.h"
-#include "structures.h"
+#include "../estructuras/structures.h"
 
 class ComandoRep {
 public:

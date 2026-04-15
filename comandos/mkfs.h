@@ -7,7 +7,7 @@
 #include <fstream> 
 #include <cmath>
 #include <algorithm>  
-#include "structures.h"
+#include "../estructuras/structures.h"
 #include "mount.h"    
 
 namespace CommandMkfs {

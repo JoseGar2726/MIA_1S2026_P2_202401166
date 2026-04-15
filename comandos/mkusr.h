@@ -7,8 +7,8 @@
 #include <sstream>
 #include <vector>
 #include <algorithm>
-#include "sesion.h"
-#include "structures.h"
+#include "../estructuras/sesion.h"
+#include "../estructuras/structures.h"
 
 class ComandoMkusr{
 public:

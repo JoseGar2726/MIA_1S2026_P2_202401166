@@ -5,8 +5,9 @@
 #include <iostream>  
 #include <fstream>   
 #include <cstring>   
-#include <cstdlib>   
-#include "structures.h"
+#include <cstdlib>  
+
+#include "../estructuras/structures.h"
 
 
 namespace ComandoFdisk {
@@ -336,6 +337,123 @@ namespace ComandoFdisk {
         } catch (const std::exception& e) {
             return std::string("Error en fdisk: ") + e.what();
         }
+    }
+
+    static std::string eliminarParticion(const std::string& ruta, const std::string& name, const std::string& tipoDelete){
+        std::string expandedPath = expandirRuta(ruta);
+        std::fstream file(expandedPath, std::ios::binary | std::ios::in | std::ios::out);
+        if (!file.is_open()) return "Error: No se pudo abrir el disco para eliminar la particion.";
+
+        MBR mbr;
+        file.seekg(0, std::ios::beg);
+        file.read(reinterpret_cast<char*>(&mbr), sizeof(MBR));
+
+        int indiceParticion = -1;
+        for(int i = 0; i < 4; i++){
+            if(mbr.mbr_partitions[i].part_status == '1' && std::string(mbr.mbr_partitions[i].part_name) == name){
+                indiceParticion = i;
+                break;
+            }
+        }
+
+        if(indiceParticion == -1) {
+            file.close();
+            return "Error: La particion '" + name + "' no existe para eliminar.";
+        }
+
+        std::string resultado = "Advertencia: Eliminando particion '" + name + "'.\n";
+
+        if(tipoDelete == "fast"){
+            mbr.mbr_partitions[indiceParticion].part_status = '0';
+            resultado += "Eliminacion FAST completada.";
+        } else if (tipoDelete == "full"){
+            mbr.mbr_partitions[indiceParticion].part_status = '0';
+            file.seekp(mbr.mbr_partitions[indiceParticion].part_start, std::ios::beg);
+            char zero = '\0';
+            for(int i = 0; i < mbr.mbr_partitions[indiceParticion].part_size; i++){
+                file.write(&zero, 1);
+            }
+            resultado += "Eliminacion FULL completada (Espacio limpiado con ceros).";
+        } else{
+            file.close();
+            return "Error: Parametro -delete='" + tipoDelete + "' invalido. Use 'fast' o 'full'.";
+        }
+
+        file.seekp(0, std::ios::beg);
+        file.write(reinterpret_cast<char*>(&mbr), sizeof(MBR));
+        file.close();
+
+        return resultado;
+    }
+
+    static std::string modificarEspacio(const std::string& ruta, const std::string& name, int adicionEnBytes){
+        std::string expandedPath = expandirRuta(ruta);
+        std::fstream file(expandedPath, std::ios::binary | std::ios::in | std::ios::out);
+        if (!file.is_open()) return "Error: No se pudo abrir el disco para modificar espacio.";
+
+        MBR mbr;
+        file.seekg(0, std::ios::beg);
+        file.read(reinterpret_cast<char*>(&mbr), sizeof(MBR));
+
+        int indiceParticion = -1;
+        for(int i = 0; i < 4; i++){
+            if(mbr.mbr_partitions[i].part_status == '1' && std::string(mbr.mbr_partitions[i].part_name) == name){
+                indiceParticion = i;
+                break;
+            }
+        }
+
+        if(indiceParticion == -1) {
+            file.close();
+            return "Error: La particion '" + name + "' no existe para modificar.";
+        }
+
+        Partition& p = mbr.mbr_partitions[indiceParticion];
+
+        if(adicionEnBytes < 0){
+            if(p.part_size + adicionEnBytes <= 0){
+                file.close();
+                return "Error: No se puede quitar mas espacio del que la particion posee.";
+            }
+            p.part_size += adicionEnBytes;
+
+            file.seekp(0, std::ios::beg);
+            file.write(reinterpret_cast<char*>(&mbr), sizeof(MBR));
+            file.close();
+            return "Espacio reducido exitosamente. Nuevo tamaño: " + std::to_string(p.part_size) + " bytes.";
+        }
+
+        if(adicionEnBytes > 0){
+            int finParticionAct = p.part_start + p.part_size;
+            int espacioLibreDisponible = 0;
+
+            int inicioSiguienteParticion = mbr.mbr_size;
+            for(int i = 0; i < 4; i++){
+                if(mbr.mbr_partitions[i].part_status == '1' && mbr.mbr_partitions[i].part_start >= finParticionAct){
+                    if(mbr.mbr_partitions[i].part_start < inicioSiguienteParticion){
+                        inicioSiguienteParticion = mbr.mbr_partitions[i].part_start;
+                    }
+                }
+            }
+
+            espacioLibreDisponible = inicioSiguienteParticion - finParticionAct;
+
+            if(adicionEnBytes > espacioLibreDisponible){
+                file.close();
+                return "Error: No hay suficiente espacio libre continuo despues de la particion. Disponible: " + 
+                        std::to_string(espacioLibreDisponible) + " bytes. Requerido: " + std::to_string(adicionEnBytes);
+            }
+
+            p.part_size += adicionEnBytes;
+
+            file.seekp(0, std::ios::beg);
+            file.write(reinterpret_cast<char*>(&mbr), sizeof(MBR));
+            file.close();
+            return "Espacio agregado exitosamente. Nuevo tamaño: " + std::to_string(p.part_size) + " bytes";
+        }
+
+        file.close();
+        return "Error: El parametro add es 0, no hay cambios.";
     }
 
 }

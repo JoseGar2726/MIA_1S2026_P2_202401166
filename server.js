@@ -16,7 +16,7 @@ app.post('/ejecutar', (req, res) => {
 
     fs.writeFileSync('comandos.txt', comandos + '\nexit\n');
 
-    const comandoEjecucion = './proyecto1 < comandos.txt';
+    const comandoEjecucion = './main < comandos.txt';
 
     exec(comandoEjecucion, (error, stdout, stderr) => {
         if (error) {

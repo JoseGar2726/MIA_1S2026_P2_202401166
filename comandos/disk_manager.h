@@ -10,7 +10,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <algorithm>
-#include "structures.h"
+#include "../estructuras/structures.h"
 
 class DiskManager {
 private:

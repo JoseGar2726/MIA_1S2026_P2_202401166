@@ -9,7 +9,7 @@
 #include <fstream>
 #include <cstring>
 #include <algorithm>
-#include "structures.h"
+#include "../estructuras/structures.h"
 
 namespace ComandoMount {
     
@@ -113,17 +113,18 @@ namespace ComandoMount {
             letrasDiscos[ruta] = letraDisco;
         }
         
-        int numeroParticiones = 1;
-        for (const auto& [id, partition] : particionesMontadas) {
-            if (partition.ruta == ruta) {
-                numeroParticiones++;
-            }
-        }
-        
         char letraMayus = std::toupper(letraDisco);
-        std::string idMontaje = carnet;
-        idMontaje += std::to_string(numeroParticiones);
-        idMontaje += letraMayus;
+        std::string idMontaje;
+        int numeroPrueba = 1;
+
+        while(true) {
+            idMontaje = carnet + std::to_string(numeroPrueba) + letraMayus;
+            
+            if (particionesMontadas.find(idMontaje) == particionesMontadas.end()) {
+                break; 
+            }
+            numeroPrueba++;
+        }
         
         return idMontaje;
     }
@@ -265,6 +266,15 @@ namespace ComandoMount {
         auto it = particionesMontadas.find(id);
         if (it != particionesMontadas.end()) {
             partition = it->second;
+            return true;
+        }
+        return false;
+    }
+
+    static bool unmount(const std::string& id){
+        auto it = particionesMontadas.find(id);
+        if(it != particionesMontadas.end()){
+            particionesMontadas.erase(it);
             return true;
         }
         return false;

@@ -1,4 +1,3 @@
-#include "disk_manager.h"
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -6,19 +5,22 @@
 #include <ctime>
 #include <algorithm>
 #include <cctype>  
-#include "fdisk.h"
-#include "mount.h"
-#include "cat.h"
-#include "mkfs.h"    
-#include "login.h"  
-#include "mkgrp.h" 
-#include "rmgrp.h"
-#include "mkusr.h"
-#include "rmusr.h"
-#include "chgrp.h"
-#include "mkfile.h"
-#include "mkdir.h"
-#include "rep.h"
+
+#include "comandos/disk_manager.h"
+#include "comandos/fdisk.h"
+#include "comandos/mount.h"
+#include "comandos/cat.h"
+#include "comandos/mkfs.h"    
+#include "comandos/login.h"  
+#include "comandos/mkgrp.h" 
+#include "comandos/rmgrp.h"
+#include "comandos/mkusr.h"
+#include "comandos/rmusr.h"
+#include "comandos/chgrp.h"
+#include "comandos/mkfile.h"
+#include "comandos/mkdir.h"
+#include "comandos/rep.h"
+#include "comandos/unmount.h"
 
 // Funcion para convertir string a minusculas
 std::string toLowerCase(const std::string& str) {
@@ -220,7 +222,7 @@ std::string executeCommand(const std::string& commandLine) {
 
     //COMANDO FDISK
     } else if (cmd == "fdisk"){
-        std::vector<std::string> permitidos = {"-path", "-size", "-unit", "-type", "-fit", "-name"};
+        std::vector<std::string> permitidos = {"-path", "-size", "-unit", "-type", "-fit", "-name", "-add", "-delete"};
         std::string parametroInvalido = parametrosInvalidos(commandLine, permitidos);
 
         if(!parametroInvalido.empty()){
@@ -229,11 +231,14 @@ std::string executeCommand(const std::string& commandLine) {
 
         std::string ruta = parseParameter(commandLine, "-path");
         std::string nombre = parseParameter(commandLine, "-name");
+        std::string deleteP = parseParameter(commandLine, "-delete");
+        std::string adicion = parseParameter(commandLine, "-add");
 
-        if (ruta.empty()){
-            return "Error: fdisk requiere parametro -path\n"
-            "Uso: fdisk -size=N -unit=[k|m] -path=ruta -type=[P|E|L] -fit=[BF|FF|WF] -name=nombre\n"
-            "fdisk -delete=nombre -path=ruta";
+        if (ruta.empty() || nombre.empty()){
+            return "Error: fdisk requiere obligatoriamente los parametros -path y -name\n"
+                   "Uso crear: fdisk -size=N -path=ruta -name=nombre ...\n"
+                   "Uso eliminar: fdisk -delete=[fast|full] -name=nombre -path=ruta\n"
+                   "Uso agregar/quitar: fdisk -add=N -unit=[b|k|m] -name=nombre -path=ruta";
         }
 
         ruta = removeQuotes(ruta);
@@ -242,49 +247,79 @@ std::string executeCommand(const std::string& commandLine) {
             return "Error: el disco debe tener la extension .mia";
         }
 
-        std::string tamanoS = parseParameter(commandLine, "-size");
-        if (tamanoS.empty()) {
-            return "Error: fdisk requiere parametro -size para crear particiones\n"
-                   "Uso: fdisk -size=N -unit=[k|m] -path=ruta -type=[P|E|L] -fit=[BF|FF|WF] -name=nombre";
+        if (!deleteP.empty()) {
+            deleteP = toLowerCase(deleteP);
+            return ComandoFdisk::eliminarParticion(ruta, nombre, deleteP);
         }
 
-        int tamano;
-        try {
-            tamano = std::stoi(tamanoS);
-        } catch (const std::exception& e) {
-            return "Error: el valor de size debe ser un número entero positivo";
+        else if (!adicion.empty()) {
+            int espacioAgregado;
+            try { 
+                espacioAgregado = std::stoi(adicion); 
+            } catch (...) { 
+                return "Error: el valor de -add debe ser un numero entero"; 
+            }
+            
+            std::string unidad = parseParameter(commandLine, "-unit");
+            unidad = unidad.empty() ? "k" : toLowerCase(unidad);
+
+            int add = espacioAgregado;
+            if (unidad == "m") {
+                add = espacioAgregado * 1024 * 1024;
+            } else if (unidad == "k") {
+                add = espacioAgregado * 1024;
+            } else if (unidad != "b") {
+                return "Error: unit para -add debe ser 'b' (bytes), 'k' (kilobytes) o 'm' (megabytes)";
+            }
+            
+            return ComandoFdisk::modificarEspacio(ruta, nombre, add);
         }
 
-        if (tamano <= 0) {
-            return "Error: el tamaño debe ser un número positivo";
-        }
+       else {
+            std::string tamanoS = parseParameter(commandLine, "-size");
+            if (tamanoS.empty()) {
+                return "Error: fdisk requiere parametro -size para crear particiones\n"
+                       "Uso: fdisk -size=N -unit=[k|m] -path=ruta -type=[P|E|L] -fit=[BF|FF|WF] -name=nombre";
+            }
 
-        std::string unidad = parseParameter(commandLine, "-unit");
-        if (unidad.empty()) {
-            unidad = "k";
-        } else {
-            unidad = toLowerCase(unidad);
-        }
+            int tamano;
+            try {
+                tamano = std::stoi(tamanoS);
+            } catch (const std::exception& e) {
+                return "Error: el valor de size debe ser un número entero positivo";
+            }
 
-        if (unidad != "b" && unidad != "k" && unidad != "m") {
-            return "Error: unit debe ser 'b' (bytes) o 'k' (kilobytes) o 'm' (megabytes)";
-        }
+            if (tamano <= 0) {
+                return "Error: el tamaño debe ser un número positivo";
+            }
 
-        std::string tipo = parseParameter(commandLine, "-type");
-        if (tipo.empty()) {
-            tipo = "P";
-        } else {
-            tipo = toLowerCase(tipo);
-        }
+            std::string unidad = parseParameter(commandLine, "-unit");
+            if (unidad.empty()) {
+                unidad = "k";
+            } else {
+                unidad = toLowerCase(unidad);
+            }
 
-        std::string fit = parseParameter(commandLine, "-fit");
-        if (fit.empty()) {
-            fit = "WF";
-        } else {
-            fit = toLowerCase(fit);
-        }
+            if (unidad != "b" && unidad != "k" && unidad != "m") {
+                return "Error: unit debe ser 'b' (bytes) o 'k' (kilobytes) o 'm' (megabytes)";
+            }
 
-        return ComandoFdisk::execute(tamano, unidad, ruta, tipo, fit , nombre);
+            std::string tipo = parseParameter(commandLine, "-type");
+            if (tipo.empty()) {
+                tipo = "P";
+            } else {
+                tipo = toLowerCase(tipo);
+            }
+
+            std::string fit = parseParameter(commandLine, "-fit");
+            if (fit.empty()) {
+                fit = "WF";
+            } else {
+                fit = toLowerCase(fit);
+            }
+
+            return ComandoFdisk::execute(tamano, unidad, ruta, tipo, fit, nombre);
+        }
 
     //COMANDO MOUNT
     } else if (cmd == "mount"){
@@ -312,6 +347,24 @@ std::string executeCommand(const std::string& commandLine) {
         }
         
         return ComandoMount::execute(ruta, nombre);
+
+    //COMANDO UNMOUNT
+    } else if (cmd == "unmount"){
+        std::vector<std::string> permitidos = {"-id"};
+        std::string parametroInvalido = parametrosInvalidos(commandLine, permitidos);
+
+        if(!parametroInvalido.empty()){
+            return "Error: parametro no reconocido '" + parametroInvalido + "' en el comando unmount";
+        }
+
+        std::string id = parseParameter(commandLine, "-id");
+
+        if (id.empty()) {
+            return "Error: unmount requiere el parámetro -id\n"
+                   "Uso: unmount -id=id";
+        }
+
+        return ComandoUnmount::execute(id);
 
     //COMANDO MKFS
     } else if (cmd == "mkfs") {

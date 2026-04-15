@@ -6,8 +6,8 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
-#include "sesion.h"
-#include "structures.h"
+#include "../estructuras/sesion.h"
+#include "../estructuras/structures.h"
 #include "mount.h"
 
 class ComandoLogin{
@@ -58,7 +58,30 @@ public:
                         return "Error: El usuario se encuentra eliminado";
                     }
 
-                    Sesion::login(std::stoi(tokens[0]), 1, usuario, id, ruta, inicio);
+                    std::string nombreGrupoUsuario = tokens[2];
+                    int idGrupoReal = -1;
+
+                    std::istringstream issBusquedaGrupo(contenidoUsuarios);
+                    std::string lineaGrupo;
+                    while (std::getline(issBusquedaGrupo, lineaGrupo, '\n')) {
+                        if (lineaGrupo.empty()) continue;
+                        std::stringstream ssG(lineaGrupo);
+                        std::string itemG;
+                        std::vector<std::string> tokensG;
+                        while(std::getline(ssG, itemG, ',')){
+                            size_t p = itemG.find_first_not_of(' ');
+                            size_t u = itemG.find_last_not_of(' ');
+                            if(p != std::string::npos && u != std::string::npos) tokensG.push_back(itemG.substr(p, u - p + 1));
+                        }
+                        // Si es un grupo, y el nombre coincide, guardamos su ID
+                        if (tokensG.size() >= 3 && tokensG[1] == "G" && tokensG[2] == nombreGrupoUsuario) {
+                            idGrupoReal = std::stoi(tokensG[0]);
+                            break;
+                        }
+                    }
+                
+                    Sesion::login(std::stoi(tokens[0]), idGrupoReal, usuario, id, ruta, inicio);
+                    
                     return "Login exitoso Bienvenido " + usuario;
                 } else if (tokens[3] == usuario){
                     coincidencia = true;

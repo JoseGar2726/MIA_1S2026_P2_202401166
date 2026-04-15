@@ -1,17 +1,17 @@
-#ifndef RMUSR_H
-#define RMUSR_H
+#ifndef RMGRP_H
+#define RMGRP_H
 
 #include <string>
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <vector>
-#include "sesion.h"
-#include "structures.h"
+#include "../estructuras/sesion.h"
+#include "../estructuras/structures.h"
 
-class ComandoRmusr{
+class ComandoRmgrp{
 public:
-    static std::string execute(const std::string& usuario){
+    static std::string execute(const std::string& name){
         if(!Sesion::activo){
             return "Error: se require tener sesion iniciada para la ejecucion de este comando";
         }
@@ -23,19 +23,19 @@ public:
         std::string ruta = Sesion::rutaDisco;
         int inicio = Sesion::inicioParticion;
 
-        std::string contenidoUsuario = leerTxtUsuarios(ruta, inicio);
-        if(contenidoUsuario.empty()){
-            return "Error: no se pudo leer users.txt";
+        std::string contenidoUsuarios = leerTxtUsuarios(ruta, inicio);
+        if (contenidoUsuarios.empty()){
+            return "Error: no se puedo leer users.txt";
         }
 
-        std::stringstream iss(contenidoUsuario);
+        std::istringstream iss(contenidoUsuarios);
         std::string linea;
         std::string nuevoContenido = "";
         bool encontrado = false;
         bool yaEliminado = false;
 
         while (std::getline(iss, linea, '\n')){
-            if(linea.empty()) continue;
+            if (linea.empty()) continue;
 
             std::stringstream ss(linea);
             std::string item;
@@ -50,32 +50,34 @@ public:
                 }
             }
 
-            if(tokens.size() == 5 && tokens[1] == "U" && tokens[3] == usuario){
+            if (tokens.size() >= 3 && tokens[1] == "G" && tokens[2] == name){
                 if(tokens[0] == "0"){
                     yaEliminado = true;
                     nuevoContenido += linea + "\n";
                 } else {
                     encontrado = true;
-                    nuevoContenido += "0, U, " + tokens[2] + ", " + tokens[3] + ", " + tokens[4] + "\n";
+                    nuevoContenido += "0, G, " + name + "\n";
                 }
             } else {
                 nuevoContenido += linea + "\n";
-            }
-            
+            } 
         }
+
         if(yaEliminado && !encontrado){
-            return "Error: el usuario '" + usuario + "' ya se encuentra eliminado";
+            return "Error: el grupo '" + name + "' ya se encuentra eliminado";
         }
+
         if(!encontrado){
-            return "Error: el usuario '" + usuario + "' no existe";
+            return "Error: el grupo '" + name + "' no existe";
         }
 
         if(!escribirTxtUsuarios(ruta, inicio, nuevoContenido)){
             return "Error: problema al guardar los cambios";
         }
 
-        return "Usuario '" + usuario + "' eliminado correctamente";
+        return "Grupo '" + name + "' elimado exitosamente";
     }
+
 private:
     static std::string leerTxtUsuarios(const std::string& ruta, int inicioParticion){
         std::string content = "";

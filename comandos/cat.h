@@ -6,8 +6,8 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
-#include "sesion.h"
-#include "structures.h"
+#include "../estructuras/sesion.h"
+#include "../estructuras/structures.h"
 
 class ComandoCat{
 public:
