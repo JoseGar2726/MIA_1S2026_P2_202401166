@@ -9,6 +9,7 @@
 #include <cmath>
 #include "../estructuras/sesion.h"
 #include "../estructuras/structures.h"
+#include "registrar.h"
 
 class ComandoMkfile{
 public:
@@ -86,6 +87,25 @@ public:
         std::string resultado = crearArchivoFisico(file, sb, inodoPadre, inodoPadreId, nombreArchivo, size, cont, inicioParticion);
 
         file.close();
+
+        std::string contenidoParaJournal = cont;
+        
+        if (contenidoParaJournal.empty() && size > 0) {
+            for (int i = 0; i < size; i++) {
+                contenidoParaJournal += std::to_string(i % 10);
+            }
+        } 
+        else if (!cont.empty()) {
+            std::ifstream externalFile(cont);
+            if (externalFile.is_open()) {
+                std::ostringstream ss;
+                ss << externalFile.rdbuf();
+                contenidoParaJournal = ss.str();
+                externalFile.close();
+            }
+        }
+
+        Registrar::escribirEnJournal(rutaDisco, inicioParticion, "mkfile", path, contenidoParaJournal);
         return resultado;
     }
 private:
@@ -118,7 +138,9 @@ private:
 
                 for(int j=0; j<4; j++){
                     if(fb.b_content[j].b_inodo != -1 ){
-                        std::string nombreActual = fb.b_content[j].b_name;
+                        char temp[13] = {0};
+                        std::strncpy(temp, fb.b_content[j].b_name, 12);
+                        std::string nombreActual(temp);
                         if(nombreActual == nombreBuscado){
                             return fb.b_content[j].b_inodo;
                         }
@@ -194,7 +216,14 @@ private:
                 if(nuevoBloque == -1) return false;
 
                 inodoPadre.i_block[i] = nuevoBloque;
+
                 FolderBlock fb;
+
+                for(int k = 0; k < 4; k++) {
+                    fb.b_content[k].b_inodo = -1;
+                    memset(fb.b_content[k].b_name, 0, 12);
+                }
+
                 std::strncpy(fb.b_content[0].b_name, nombre.c_str(), 12);
                 fb.b_content[0].b_inodo = nuevoInodoId;
 
@@ -220,12 +249,20 @@ private:
         inodo.i_size = 0;
         inodo.i_type = '0';
         inodo.i_perm = 664;
+        
+        for(int i = 0; i < 15; i++) inodo.i_block[i] = -1;
         inodo.i_block[0] = nuevoBloque;
 
         file.seekp(sb.s_inode_start + (nuevoInodo * sizeof(Inode)), std::ios::beg);
         file.write(reinterpret_cast<char*>(&inodo), sizeof(Inode));
 
         FolderBlock fb;
+        for(int i = 0; i < 4; i++) {
+            fb.b_content[i].b_inodo = -1;
+            memset(fb.b_content[i].b_name, 0, 12);
+        }
+
+
         std::strncpy(fb.b_content[0].b_name, ".", 12);
         fb.b_content[0].b_inodo = nuevoInodo;
         std::strncpy(fb.b_content[1].b_name, "..", 12);
@@ -273,6 +310,8 @@ private:
         inodoArchivo.i_type = '1';
         inodoArchivo.i_perm = 664;
 
+        for(int i = 0; i < 15; i++) inodoArchivo.i_block[i] = -1;
+
         for(int i = 0; i < bloquesRequeridos; i++){
             int nuevoBloque = obtenerBloqueLIbre(file, sb, inicioParticion);
             if (nuevoBloque == -1) return "Error: disco lleno, no hay bloques libres";
@@ -280,6 +319,7 @@ private:
             inodoArchivo.i_block[i] = nuevoBloque;
 
             FileBlock fb;
+            memset(fb.b_content, 0, 64);
             int inicioChunk = i * 64;
             int longitudChunk = std::min(64, (int)contenidoFinal.length() - inicioChunk);
             if(longitudChunk > 0){

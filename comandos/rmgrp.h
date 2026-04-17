@@ -8,6 +8,7 @@
 #include <vector>
 #include "../estructuras/sesion.h"
 #include "../estructuras/structures.h"
+#include "registrar.h"
 
 class ComandoRmgrp{
 public:
@@ -75,6 +76,7 @@ public:
             return "Error: problema al guardar los cambios";
         }
 
+        Registrar::escribirEnJournal(Sesion::rutaDisco, Sesion::inicioParticion, "rmgrp", "/users.txt", name);
         return "Grupo '" + name + "' elimado exitosamente";
     }
 

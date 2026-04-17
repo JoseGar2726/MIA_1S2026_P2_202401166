@@ -103,6 +103,7 @@ public:
             return "Error: problema al guardar los cambios";
         }
 
+        Registrar::escribirEnJournal(Sesion::rutaDisco, Sesion::inicioParticion, "chgrp", ruta, grupo);
         return "Usuario '" + usuario + "' movido exitosamente al grupo '" + grupo + "'";
     }
 private:

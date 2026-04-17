@@ -9,6 +9,7 @@
 #include <algorithm>
 #include "../estructuras/sesion.h"
 #include "../estructuras/structures.h"
+#include "registrar.h"
 
 class ComandoMkusr{
 public:
@@ -85,13 +86,14 @@ public:
             return "Error: el grupo '" + grupo + "' no existe";
         }
 
-        std::string nuevaLinea = std::to_string(maxUsrId + 1) + ", U, " + grupo + ", " + usuario + ", " + password + "\n";
+        std::string nuevaLinea = std::to_string(maxUsrId + 1) + ",U," + grupo + "," + usuario + "," + password + "\n";
         contenidoUsuarios += nuevaLinea;
 
         if(!escribirTxtUsuarios(ruta, inicio, contenidoUsuarios)){
             return "Error: error al guardar el nuevo usuario";
         }
 
+        Registrar::escribirEnJournal(Sesion::rutaDisco, Sesion::inicioParticion, "mkusr", "/users.txt", usuario + "," + password);
         return "Usuario '" + usuario + "' creado exitosamente con ID " + std::to_string(maxUsrId + 1);
     }
 private:

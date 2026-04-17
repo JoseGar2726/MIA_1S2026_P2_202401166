@@ -21,8 +21,14 @@
 #include "comandos/mkdir.h"
 #include "comandos/rep.h"
 #include "comandos/unmount.h"
+#include "comandos/journaling.h"
+#include "comandos/remove.h"
+#include "comandos/rename.h"
+#include "comandos/copy.h"
+#include "comandos/chown.h"
+#include "comandos/chmod.h"
 
-// Funcion para convertir string a minusculas
+// Funcion para convertir string af minusculas
 std::string toLowerCase(const std::string& str) {
     std::string result = str;
     std::transform(result.begin(), result.end(), result.begin(), ::tolower);
@@ -368,7 +374,7 @@ std::string executeCommand(const std::string& commandLine) {
 
     //COMANDO MKFS
     } else if (cmd == "mkfs") {
-        std::vector<std::string> permitidos = {"-id", "-type"};
+        std::vector<std::string> permitidos = {"-id", "-type", "-fs"};
         std::string parametroInvalido = parametrosInvalidos(commandLine, permitidos);
 
         if(!parametroInvalido.empty()){
@@ -377,13 +383,20 @@ std::string executeCommand(const std::string& commandLine) {
 
         std::string id = parseParameter(commandLine, "-id");
         std::string type = parseParameter(commandLine, "-type");
+
+        std::string fs = parseParameter(commandLine, "-fs");
+        fs = fs.empty() ? "2fs" : toLowerCase(fs);
+
+        if (fs != "2fs" && fs != "3fs") {
+            return "Error: el parametro -fs solo acepta '2fs' o '3fs'";
+        }
         
         if (id.empty()) {
             return "Error: mkfs requiere el parámetro -id\n"
                    "Uso: mkfs -id=id [-type=full]";
         }
-        
-        return CommandMkfs::execute(id, type);
+
+        return CommandMkfs::execute(id, type, fs);
     
     //COMANDO MOUNTED
     } else if (cmd == "mounted"){
@@ -639,6 +652,120 @@ std::string executeCommand(const std::string& commandLine) {
         ruta = removeQuotes(ruta);
 
         return ComandoRep::execute(name, path, id, ruta);
+
+    //REMOVE
+    } else if (cmd == "remove"){
+        std::vector<std::string> permitidos = {"-path"};
+        std::string parametroInvalido = parametrosInvalidos(commandLine, permitidos);
+
+        if(!parametroInvalido.empty()){
+            return "Error: parametro no reconocido '" + parametroInvalido + "' en el comando remove";
+        }
+
+        std::string ruta = parseParameter(commandLine, "-path");
+        if (ruta.empty()) return "Error: el comando require el parametro -path";
+
+        ruta = removeQuotes(ruta);
+
+        return ComandoRemove::execute(ruta);
+
+    //RENAME
+    } else if (cmd == "rename"){
+        std::vector<std::string> permitidos = {"-path", "-name"};
+        std::string parametroInvalido = parametrosInvalidos(commandLine, permitidos);
+
+        if(!parametroInvalido.empty()){
+            return "Error: parametro no reconocido '" + parametroInvalido + "' en el comando rename";
+        }
+
+        std::string ruta = parseParameter(commandLine, "-path");
+        if (ruta.empty()) return "Error: el comando require el parametro -path";
+
+        std::string nombre = parseParameter(commandLine, "-name");
+        if (nombre.empty()) return "Error: el comando require el parametro -name";
+
+        ruta = removeQuotes(ruta);
+        nombre = removeQuotes(nombre);
+
+        return ComandoRename::execute(ruta, nombre);
+
+    //COPY
+    } else if (cmd == "copy"){
+        std::vector<std::string> permitidos = {"-path", "-destino"};
+        std::string parametroInvalido = parametrosInvalidos(commandLine, permitidos);
+
+        if(!parametroInvalido.empty()){
+            return "Error: parametro no reconocido '" + parametroInvalido + "' en el comando copy";
+        }
+
+        std::string ruta = parseParameter(commandLine, "-path");
+        if (ruta.empty()) return "Error: el comando require el parametro -path";
+
+        std::string destino = parseParameter(commandLine, "-destino");
+        if (destino.empty()) return "Error: el comando require el parametro -destino";
+
+        ruta = removeQuotes(ruta);
+        destino = removeQuotes(destino);
+
+        return ComandoCopy::execute(ruta, destino);
+
+    //CHOWN
+    } else if (cmd == "chown"){
+        std::vector<std::string> permitidos = {"-path", "-r", "-usuario"};
+        std::string parametroInvalido = parametrosInvalidos(commandLine, permitidos);
+
+        if(!parametroInvalido.empty()){
+            return "Error: parametro no reconocido '" + parametroInvalido + "' en el comando chown";
+        }
+
+        std::string ruta = parseParameter(commandLine, "-path");
+        if (ruta.empty()) return "Error: el comando require el parametro -path";
+
+        std::string usuario = parseParameter(commandLine, "-usuario");
+        if (usuario.empty()) return "Error: el comando require el parametro -usuario";
+
+        ruta = removeQuotes(ruta);
+        usuario = removeQuotes(usuario);
+
+        bool recursivo = (commandLine.find("-r") != std::string::npos || commandLine.find("-R") != std::string::npos);
+
+        return ComandoChown::execute(ruta, usuario, recursivo);
+
+    //CHMOD
+    } else if (cmd == "chmod"){
+        std::vector<std::string> permitidos = {"-path", "-r", "-ugo"};
+        std::string parametroInvalido = parametrosInvalidos(commandLine, permitidos);
+
+        if(!parametroInvalido.empty()){
+            return "Error: parametro no reconocido '" + parametroInvalido + "' en el comando chmod";
+        }
+
+        std::string ruta = parseParameter(commandLine, "-path");
+        if (ruta.empty()) return "Error: el comando require el parametro -path";
+
+        std::string ugo = parseParameter(commandLine, "-ugo");
+        if (ugo.empty()) return "Error: el comando require el parametro -ugo";
+
+        ruta = removeQuotes(ruta);
+        ugo = removeQuotes(ugo);
+
+        bool recursivo = (commandLine.find("-r") != std::string::npos || commandLine.find("-R") != std::string::npos);
+
+        return ComandoChmod::execute(ruta, ugo, recursivo);
+         
+    //JOURNALING
+    } else if (cmd == "journaling"){
+        std::vector<std::string> permitidos = {"-id"};
+        std::string parametroInvalido = parametrosInvalidos(commandLine, permitidos);
+
+        if(!parametroInvalido.empty()){
+            return "Error: parametro no reconocido '" + parametroInvalido + "' en el comando journaling";
+        }
+
+        std::string id = parseParameter(commandLine, "-id");
+        if (id.empty()) return "Error: journaling requiere el parámetro obligatorio -id";
+
+        return ComandoJournaling::execute(id);
 
     //COMANDO INFO
     } else if (cmd == "info") {

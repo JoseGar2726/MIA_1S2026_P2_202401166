@@ -132,9 +132,14 @@ private:
                 file.seekg(sb.s_block_start + (inodoCarpeta.i_block[i] * sizeof(FolderBlock)), std::ios::beg);
                 file.read(reinterpret_cast<char*>(&fb), sizeof(FolderBlock));
 
-                for(int j = 0; j < 4; j++){
-                    if (fb.b_content[j].b_inodo != -1 && std::string(fb.b_content[j].b_name) == nombreBuscado){
-                        return fb.b_content[j].b_inodo;
+                for(int j=0; j<4; j++){
+                    if(fb.b_content[j].b_inodo != -1 ){
+                        char temp[13] = {0};
+                        std::strncpy(temp, fb.b_content[j].b_name, 12);
+                        std::string nombreActual(temp);
+                        if(nombreActual == nombreBuscado){
+                            return fb.b_content[j].b_inodo;
+                        }
                     }
                 }
             }

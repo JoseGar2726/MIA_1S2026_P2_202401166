@@ -1,0 +1,59 @@
+# ==========================================
+# 1. CREACIÓN Y MONTAJE
+# ==========================================
+mkdisk -size=15 -unit=M -fit=FF -path=/home/josegar/fase2/DiscoRemRadar.mia
+fdisk -type=P -unit=M -name=PartEXT3 -size=10 -path=/home/josegar/fase2/DiscoRemRadar.mia -fit=FF
+mount -path=/home/josegar/fase2/DiscoRemRadar.mia -name=PartEXT3
+
+# Asumiremos ID 661A
+mkfs -id=661A -type=full -fs=3fs
+
+# ==========================================
+# 2. CONFIGURACIÓN INICIAL (Root)
+# ==========================================
+login -user=root -pass=123 -id=661A
+mkgrp -name=devs
+mkusr -user=user1 -pass=1234 -grp=devs
+
+# Root crea la carpeta base y se la regala a user1
+mkdir -p -path=/home/proyecto
+chown -path=/home/proyecto -usuario=user1 -r
+logout
+
+# ==========================================
+# 3. EL USUARIO NORMAL CREA SUS ARCHIVOS
+# ==========================================
+login -user=user1 -pass=1234 -id=661A
+mkdir -path=/home/proyecto/src
+mkfile -path=/home/proyecto/src/main.txt -size=15
+mkfile -path=/home/proyecto/src/util.txt -size=15
+logout
+
+# ==========================================
+# 4. LA TRAMPA DEL ROOT
+# ==========================================
+login -user=root -pass=123 -id=661A
+# Root mete un archivo y lo blinda (000 = nadie entra)
+mkfile -path=/home/proyecto/src/sys.log -size=10
+chmod -path=/home/proyecto/src/sys.log -ugo=000
+logout
+
+# ==========================================
+# 5. LA PRUEBA DE FUEGO (User1)
+# ==========================================
+login -user=user1 -pass=1234 -id=661A
+
+# INTENTO DE BORRADO
+# DEBE FALLAR: Lanzará tu error de "operacion abortada".
+remove -path=/home/proyecto/src
+
+# VALIDACIÓN DE LA REGLA DE "TODO O NADA"
+# Como el borrado se abortó, el archivo main.txt NO DEBIÓ BORRARSE.
+# Este cat DEBE funcionar e imprimir el texto.
+cat -file1=/home/proyecto/src/main.txt
+
+# 6. JOURNALING
+journaling -id=661A
+
+logout
+exit

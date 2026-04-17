@@ -8,6 +8,7 @@
 #include <vector>
 #include "../estructuras/sesion.h"
 #include "../estructuras/structures.h"
+#include "registrar.h"
 
 class ComandoRmusr{
 public:
@@ -74,6 +75,7 @@ public:
             return "Error: problema al guardar los cambios";
         }
 
+        Registrar::escribirEnJournal(Sesion::rutaDisco, Sesion::inicioParticion, "rmusr", "/users.txt", usuario);
         return "Usuario '" + usuario + "' eliminado correctamente";
     }
 private:

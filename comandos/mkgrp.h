@@ -8,6 +8,7 @@
 #include <vector>
 #include "../estructuras/sesion.h"
 #include "../estructuras/structures.h"
+#include "registrar.h"
 
 class ComandoMkgrp{
 public:
@@ -64,13 +65,14 @@ public:
             }
         }
 
-        std::string nuevaLinea = std::to_string(maxGrpId + 1) + ", G, " + nombre + "\n";
+        std::string nuevaLinea = std::to_string(maxGrpId + 1) + ",G," + nombre + "\n";
         contenidoUsuarios += nuevaLinea;
 
         if(!escribirTxtUsuarios(ruta, inicio, contenidoUsuarios)){
             return "Error: Error al guardar el grupo";
         }
 
+        Registrar::escribirEnJournal(Sesion::rutaDisco, Sesion::inicioParticion, "mkgrp", "/users.txt", nombre);
         return "Grupo '" + nombre + "' creado exitosamente con ID " + std::to_string(maxGrpId + 1) + ".";
     }
 private:

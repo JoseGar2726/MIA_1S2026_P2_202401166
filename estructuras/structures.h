@@ -77,6 +77,7 @@ struct Superblock {
     int s_bm_block_start;          // Inicio del bitmap de bloques
     int s_inode_start;             // Inicio de la tabla de inodos
     int s_block_start;             // Inicio de los bloques
+    int s_fylesystem_type;         // Tipo de administrador de archivos(EXT2 O EXT3)
 
     Superblock() {
         s_filesystem_type = 0;
