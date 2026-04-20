@@ -27,6 +27,9 @@
 #include "comandos/copy.h"
 #include "comandos/chown.h"
 #include "comandos/chmod.h"
+#include "comandos/move.h"
+#include "comandos/find.h"
+#include "comandos/loss.h"
 
 // Funcion para convertir string af minusculas
 std::string toLowerCase(const std::string& str) {
@@ -709,6 +712,46 @@ std::string executeCommand(const std::string& commandLine) {
 
         return ComandoCopy::execute(ruta, destino);
 
+    //MOVE
+    } else if (cmd == "move"){
+        std::vector<std::string> permitidos = {"-path", "-destino"};
+        std::string parametroInvalido = parametrosInvalidos(commandLine, permitidos);
+
+        if(!parametroInvalido.empty()){
+            return "Error: parametro no reconocido '" + parametroInvalido + "' en el comando move";
+        }
+
+        std::string ruta = parseParameter(commandLine, "-path");
+        if (ruta.empty()) return "Error: el comando require el parametro -path";
+
+        std::string destino = parseParameter(commandLine, "-destino");
+        if (destino.empty()) return "Error: el comando require el parametro -destino";
+
+        ruta = removeQuotes(ruta);
+        destino = removeQuotes(destino);
+
+        return ComandoMove::execute(ruta, destino);
+
+    //FIND
+    } else if (cmd == "find"){
+        std::vector<std::string> permitidos = {"-path", "-name"};
+        std::string parametroInvalido = parametrosInvalidos(commandLine, permitidos);
+
+        if(!parametroInvalido.empty()){
+            return "Error: parametro no reconocido '" + parametroInvalido + "' en el comando find";
+        }
+
+        std::string ruta = parseParameter(commandLine, "-path");
+        if (ruta.empty()) return "Error: el comando require el parametro -path";
+
+        std::string nombre = parseParameter(commandLine, "-name");
+        if (nombre.empty()) return "Error: el comando require el parametro -name";
+
+        ruta = removeQuotes(ruta);
+        nombre = removeQuotes(nombre);
+
+        return ComandoFind::execute(ruta, nombre);
+
     //CHOWN
     } else if (cmd == "chown"){
         std::vector<std::string> permitidos = {"-path", "-r", "-usuario"};
@@ -766,6 +809,20 @@ std::string executeCommand(const std::string& commandLine) {
         if (id.empty()) return "Error: journaling requiere el parámetro obligatorio -id";
 
         return ComandoJournaling::execute(id);
+
+    //LOSS
+    } else if (cmd == "loss"){
+        std::vector<std::string> permitidos = {"-id"};
+        std::string parametroInvalido = parametrosInvalidos(commandLine, permitidos);
+
+        if(!parametroInvalido.empty()){
+            return "Error: parametro no reconocido '" + parametroInvalido + "' en el comando loss";
+        }
+
+        std::string id = parseParameter(commandLine, "-id");
+        if (id.empty()) return "Error: journaling requiere el parámetro obligatorio -id";
+
+        return ComandoLoss::execute(id);
 
     //COMANDO INFO
     } else if (cmd == "info") {
