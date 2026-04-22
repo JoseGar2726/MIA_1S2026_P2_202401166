@@ -93,7 +93,7 @@ public:
             return "Error: No hay espacio para crear la carpeta";
         }
 
-        Registrar::escribirEnJournal(rutaDisco, inicioParticion, "mkdir", path, "");
+        Registrar::escribirEnJournal(rutaDisco, inicioParticion, "mkdir", path, "Carpetas Creadas");
         return "Carpeta '" + nombreCarpetaDestino + "' creada correctamente";
     }
 

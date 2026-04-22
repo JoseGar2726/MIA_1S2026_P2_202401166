@@ -5,6 +5,7 @@
 #include <ctime>
 #include <algorithm>
 #include <cctype>  
+#include "include/crow_all.h"
 
 #include "comandos/disk_manager.h"
 #include "comandos/fdisk.h"
@@ -429,41 +430,41 @@ std::string executeCommand(const std::string& commandLine) {
         
         return ComandoCat::execute(archivos);
 
-    //COMANDO LOGIN
-    } else if (cmd == "login"){
-        std::vector<std::string> permitidos = {"-user", "-pass", "-id"};
-        std::string parametroInvalido = parametrosInvalidos(commandLine, permitidos);
-
-        if(!parametroInvalido.empty()){
-            return "Error: parametro no reconocido '" + parametroInvalido + "' en el comando login";
-        }
-
-        std::string usuario = parseParameter(commandLine, "-user");
-        std::string password = parseParameter(commandLine, "-pass");
-        std::string id = parseParameter(commandLine, "-id");
-
-        if(usuario.empty() || password.empty() || id.empty()){
-            return "Error: login requiere los parametros -user, -pass e -id \n"
-                   "Uso login -user=usuario -pass=password -id=id_particion";
-        }
-
-        usuario = removeQuotes(usuario);
-        password = removeQuotes(password);
-
-        return ComandoLogin::execute(usuario, password, id);
+    ////COMANDO LOGIN
+    //} else if (cmd == "login"){
+    //    std::vector<std::string> permitidos = {"-user", "-pass", "-id"};
+    //    std::string parametroInvalido = parametrosInvalidos(commandLine, permitidos);
+//
+    //    if(!parametroInvalido.empty()){
+    //        return "Error: parametro no reconocido '" + parametroInvalido + "' en el comando login";
+    //    }
+//
+    //    std::string usuario = parseParameter(commandLine, "-user");
+    //    std::string password = parseParameter(commandLine, "-pass");
+    //    std::string id = parseParameter(commandLine, "-id");
+//
+    //    if(usuario.empty() || password.empty() || id.empty()){
+    //        return "Error: login requiere los parametros -user, -pass e -id \n"
+    //               "Uso login -user=usuario -pass=password -id=id_particion";
+    //    }
+//
+    //    usuario = removeQuotes(usuario);
+    //    password = removeQuotes(password);
+//
+    //    return ComandoLogin::execute(usuario, password, id);
     
     //COMANDO LOGOUT
-    } else if(cmd == "logout"){
-        if(!Sesion::activo){
-            return "Error: no hay sesion iniciada";
-        }
-
-        std::string usuarioActual = Sesion::usuario;
-
-        Sesion::logout();
-
-        return "Sesion cerrada correctamente - " + usuarioActual + "";
-
+    //} else if(cmd == "logout"){
+    //    if(!Sesion::activo){
+    //        return "Error: no hay sesion iniciada";
+    //    }
+//
+    //    std::string usuarioActual = Sesion::usuario;
+//
+    //    Sesion::logout();
+//
+    //    return "Sesion cerrada correctamente - " + usuarioActual + "";
+//
     //COMANDO MKGRP
     } else if (cmd == "mkgrp"){
         std::vector<std::string> permitidos = {"-name"};
@@ -845,43 +846,282 @@ std::string executeCommand(const std::string& commandLine) {
     }
 }
 
+int buscarEnCarpeta(std::fstream& file, Superblock& sb, int inodoId, const std::string& nombreBuscar) {
+    Inode inodoCarpeta;
+    file.seekg(sb.s_inode_start + (inodoId * sizeof(Inode)), std::ios::beg);
+    file.read(reinterpret_cast<char*>(&inodoCarpeta), sizeof(Inode));
+
+    for (int i = 0; i < 12; i++) {
+        if (inodoCarpeta.i_block[i] != -1) {
+            FolderBlock fb;
+            file.seekg(sb.s_block_start + (inodoCarpeta.i_block[i] * sizeof(FolderBlock)), std::ios::beg);
+            file.read(reinterpret_cast<char*>(&fb), sizeof(FolderBlock));
+
+            for (int j = 0; j < 4; j++) {
+                if (fb.b_content[j].b_inodo != -1) {
+                    std::string nombreActual = fb.b_content[j].b_name;
+                    if (nombreActual == nombreBuscar) {
+                        return fb.b_content[j].b_inodo;
+                    }
+                }
+            }
+        }
+    }
+    return -1;
+}
+
 int main(int argc, char* argv[]) {
 
     srand(time(nullptr));
 
-    std::cout << "C++ DISK\n";
-    std::cout << "MIA Proyecto 1 - 2026\n";
-    std::cout << "Escriba 'exit' para salir\n";
+    crow::App<crow::CORSHandler> app;
+    auto& cors = app.get_middleware<crow::CORSHandler>();
+    cors.global()
+        .headers("X-Custom-Header", "Upgrade-Insecure-Requests", "Content-Type")
+        .methods("POST"_method, "GET"_method, "OPTIONS"_method)
+        .origin("*"); 
 
-    std::string commandLine;
-    
-    while (true) {
-        std::cout << "> ";
-        std::cout.flush(); 
+    //ENDPOINT CONSOLA
+    CROW_ROUTE(app, "/ejecutar").methods(crow::HTTPMethod::POST, crow::HTTPMethod::OPTIONS)([](const crow::request& req) {
         
-        if (!std::getline(std::cin, commandLine)) {
+        auto json_body = crow::json::load(req.body);
+        if (!json_body) return crow::response(400, "Error: JSON Invalido");
 
-            std::cout << "\nSaliendo del programa...\n";
-            break;
+        std::string comandoTexto = json_body["consola"].s();
+        
+        std::cout << "\n[FRONTEND REQUEST] Ejecutando:\n" << comandoTexto << "\n-------------------\n";
+
+        std::string respuestaFinal = "";
+
+        std::istringstream stream(comandoTexto);
+        std::string linea;
+
+        while (std::getline(stream, linea)) {
+            if (!linea.empty() && linea.back() == '\r') linea.pop_back();
+            if (linea.empty()) continue;
+
+            std::string res = executeCommand(linea);
+
+            if (res == "EXIT") {
+                respuestaFinal += "Comando exit omitido en modo servidor.\n";
+            } else if (!res.empty()) {
+                respuestaFinal += res + "\n\n";
+            }
         }
 
-        if (commandLine.empty()) {
-            continue;
+        crow::json::wvalue json_response;
+        json_response["respuesta"] = respuestaFinal;
+        return crow::response(json_response);
+    });
+
+    //ENDPOINT LOGIN
+    CROW_ROUTE(app, "/login").methods(crow::HTTPMethod::POST, crow::HTTPMethod::OPTIONS)([](const crow::request& req) {
+        auto json_body = crow::json::load(req.body);
+        if (!json_body) return crow::response(400, "Error: JSON Invalido");
+
+        std::string usuario = json_body["usuario"].s();
+        std::string password = json_body["pass"].s();
+        std::string id = json_body["id"].s();
+
+        std::string resultado = ComandoLogin::execute(usuario, password, id);
+
+        crow::json::wvalue json_response;
+        json_response["respuesta"] = resultado;
+        return crow::response(json_response);
+    });
+
+    //ENDPOINT LOGOUT
+    CROW_ROUTE(app, "/logout").methods(crow::HTTPMethod::POST, crow::HTTPMethod::OPTIONS)([](const crow::request& req) {
+        
+        crow::json::wvalue json_response;
+
+        if(!Sesion::activo){
+            json_response["respuesta"] = "Error: no hay sesion iniciada";
+        } else {
+            std::string usuarioActual = Sesion::usuario;
+            Sesion::logout();
+            json_response["respuesta"] = "Sesion cerrada correctamente - " + usuarioActual;
         }
 
-        // Ejecutar comando
-        std::string result = executeCommand(commandLine);
+        return crow::response(json_response);
+    });
 
-        if (result == "EXIT") {
-            std::cout << "Saliendo del programa...\n";
-            break;
+    //ENDPOINT VISUALIZAR CARPETAS Y ARCHIVOS
+    CROW_ROUTE(app, "/explorar").methods(crow::HTTPMethod::POST, crow::HTTPMethod::OPTIONS)([](const crow::request& req) {
+        if (req.method == crow::HTTPMethod::OPTIONS) {
+            return crow::response(200);
         }
 
-        // Mostrar resultado
-        if (!result.empty()) {
-            std::cout << result << "\n\n";
+        auto json_body = crow::json::load(req.body);
+        if (!json_body) return crow::response(400, "{\"error\": \"JSON Invalido\"}");
+
+        std::string id = json_body["id"].s();
+        std::string rutaInterior = json_body["ruta"].s();
+
+        ComandoMount::ParticionMontada particion;
+        
+        if(!ComandoMount::getMountedPartition(id, particion)){
+            return crow::response(404, "{\"error\": \"Error: La particion con id '" + id + "' no esta montada\"}");
         }
-    }
+
+        std::string rutaDisco = particion.ruta;
+        int inicioParticion = particion.inicio;
+
+        std::fstream file(rutaDisco, std::ios::in | std::ios::binary);
+        if (!file.is_open()) return crow::response(400, "{\"error\": \"No se pudo abrir el disco\"}");
+
+        Superblock sb;
+        file.seekg(inicioParticion, std::ios::beg);
+        file.read(reinterpret_cast<char*>(&sb), sizeof(Superblock));
+
+        if (sb.s_magic != 0xEF53) {
+            file.close();
+            return crow::response(400, "{\"error\": \"La particion no esta formateada (Falta mkfs).\"}");
+        }
+
+        int inodoIdActual = 0;
+        
+        if (rutaInterior != "/" && !rutaInterior.empty()) {
+            std::vector<std::string> carpetas;
+            std::stringstream ss(rutaInterior);
+            std::string token;
+            while (std::getline(ss, token, '/')) {
+                if (!token.empty()) carpetas.push_back(token);
+            }
+            for (const std::string& nombreCarpeta : carpetas) {
+                inodoIdActual = buscarEnCarpeta(file, sb, inodoIdActual, nombreCarpeta);
+                if (inodoIdActual == -1) {
+                    file.close();
+                    return crow::response(404, "{\"error\": \"La ruta no existe\"}");
+                }
+            }
+        }
+
+        Inode inodoCarpeta;
+        file.seekg(sb.s_inode_start + (inodoIdActual * sizeof(Inode)), std::ios::beg);
+        file.read(reinterpret_cast<char*>(&inodoCarpeta), sizeof(Inode));
+
+        crow::json::wvalue::list listaArchivos;
+
+        for (int i = 0; i < 12; i++) {
+            if (inodoCarpeta.i_block[i] != -1) {
+                FolderBlock fb;
+                file.seekg(sb.s_block_start + (inodoCarpeta.i_block[i] * sizeof(FolderBlock)), std::ios::beg);
+                file.read(reinterpret_cast<char*>(&fb), sizeof(FolderBlock));
+
+                for (int j = 0; j < 4; j++) {
+                    if (fb.b_content[j].b_inodo != -1) {
+                        Inode hijo;
+                        file.seekg(sb.s_inode_start + (fb.b_content[j].b_inodo * sizeof(Inode)), std::ios::beg);
+                        file.read(reinterpret_cast<char*>(&hijo), sizeof(Inode));
+
+                        std::string nombre = fb.b_content[j].b_name;
+
+                        if (nombre != "." && nombre != "..") {
+                            crow::json::wvalue objArchivo;
+                            objArchivo["nombre"] = nombre;
+                            objArchivo["tipo"] = (hijo.i_type == '0') ? "carpeta" : "archivo";
+                            objArchivo["size"] = hijo.i_size;
+                            listaArchivos.push_back(std::move(objArchivo));
+                        }
+                    }
+                }
+            }
+        }
+        file.close();
+
+        crow::json::wvalue json_response;
+        json_response["archivos"] = std::move(listaArchivos);
+        return crow::response(json_response);
+    });
+
+    //LEER ARCHIVO
+    CROW_ROUTE(app, "/leer_archivo").methods(crow::HTTPMethod::POST, crow::HTTPMethod::OPTIONS)([](const crow::request& req) {
+        
+        if (req.method == crow::HTTPMethod::OPTIONS) {
+            return crow::response(200); 
+        }
+
+        auto json_body = crow::json::load(req.body);
+        if (!json_body) return crow::response(400, "{\"error\": \"JSON Invalido\"}");
+
+        std::string id = json_body["id"].s();
+        std::string rutaInterior = json_body["ruta"].s();
+
+        ComandoMount::ParticionMontada particion;
+        if(!ComandoMount::getMountedPartition(id, particion)){
+            return crow::response(404, "{\"error\": \"Particion no montada\"}");
+        }
+
+        std::fstream file(particion.ruta, std::ios::in | std::ios::binary);
+        if (!file.is_open()) return crow::response(400, "{\"error\": \"No se pudo abrir el disco\"}");
+
+        Superblock sb;
+        file.seekg(particion.inicio, std::ios::beg);
+        file.read(reinterpret_cast<char*>(&sb), sizeof(Superblock));
+
+        if (sb.s_magic != 0xEF53) {
+            file.close();
+            return crow::response(400, "{\"error\": \"La particion no esta formateada (Falta mkfs).\"}");
+        }
+
+        int inodoIdActual = 0;
+        
+        if (rutaInterior != "/" && !rutaInterior.empty()) {
+            std::vector<std::string> carpetas;
+            std::stringstream ss(rutaInterior);
+            std::string token;
+            while (std::getline(ss, token, '/')) {
+                if (!token.empty()) carpetas.push_back(token);
+            }
+            for (const std::string& nombre : carpetas) {
+                inodoIdActual = buscarEnCarpeta(file, sb, inodoIdActual, nombre);
+                if (inodoIdActual == -1) {
+                    file.close();
+                    return crow::response(404, "{\"error\": \"El archivo no existe\"}");
+                }
+            }
+        }
+
+        Inode inodoArchivo;
+        file.seekg(sb.s_inode_start + (inodoIdActual * sizeof(Inode)), std::ios::beg);
+        file.read(reinterpret_cast<char*>(&inodoArchivo), sizeof(Inode));
+
+        if (inodoArchivo.i_type != '1') {
+            file.close();
+            return crow::response(400, "{\"error\": \"La ruta no es un archivo de texto\"}");
+        }
+
+        std::string contenidoFinal = "";
+        for (int i = 0; i < 12; i++) {
+            if (inodoArchivo.i_block[i] != -1) {
+                FileBlock fb;
+                file.seekg(sb.s_block_start + (inodoArchivo.i_block[i] * sizeof(FileBlock)), std::ios::beg);
+                file.read(reinterpret_cast<char*>(&fb), sizeof(FileBlock));
+                
+                for (int c = 0; c < 64; c++) {
+                    if (fb.b_content[c] != '\0') {
+                        contenidoFinal += fb.b_content[c];
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+        file.close();
+
+        crow::json::wvalue json_response;
+        json_response["contenido"] = contenidoFinal;
+        return crow::response(json_response);
+    });
+
+    std::cout << "==========================================" << std::endl;
+    std::cout << "C++ DISK - SERVIDOR ACTIVO" << std::endl;
+    std::cout << "MIA Proyecto 2 - 2026" << std::endl;
+    std::cout << "Escuchando en http://localhost:8080" << std::endl;
+    std::cout << "==========================================" << std::endl;
+    
+    app.port(8080).multithreaded().run();
 
     return 0;
 }

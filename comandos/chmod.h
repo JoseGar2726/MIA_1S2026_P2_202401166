@@ -20,6 +20,12 @@ public:
             return "Error: el parametro de permisos(ugo) debe tener exactamente 3 digitos";
         }
 
+        for(char c : ugoStr){
+            if(c < '0' || c > '7'){
+                return "Error: Permisos invalidos. Cada digito debe ser un numero entre 0 y 7 (Sistema Octal).";
+            }
+        }
+
         int nuevoPermiso = 0;
         try{
             nuevoPermiso = std::stoi(ugoStr);

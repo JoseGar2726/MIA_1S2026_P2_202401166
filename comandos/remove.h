@@ -83,7 +83,7 @@ public:
 
         file.close();
 
-        Registrar::escribirEnJournal(rutaDisco, inicioParticion, "remove", ruta, "");
+        Registrar::escribirEnJournal(rutaDisco, inicioParticion, "remove", ruta, "Archivo Eliminado");
 
         return "Elemento '" + ruta + "' eliminado exitosamente.";
     }
@@ -131,7 +131,7 @@ private:
                 }
             }
         }
-        return false;
+        return true;
     }
 
     static int buscarEnCarpeta(std::fstream& file, const Superblock& sb, int inodoId, const std::string& nombreBuscado){

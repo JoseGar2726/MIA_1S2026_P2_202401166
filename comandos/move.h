@@ -32,7 +32,7 @@ public:
             if(!token.empty()) carpetasOrigen.push_back(token);
         }
         if(carpetasOrigen.empty()) return "Error: ruta origen invalida";
-        std::string nombreElemento = carpetasOrigen.back();
+        std::string nombreElementoOrigen = carpetasOrigen.back();
         carpetasOrigen.pop_back();
 
         std::fstream file(rutaDisco, std::ios::in | std::ios::out | std::ios::binary);
@@ -50,49 +50,81 @@ public:
             }
         }
 
-        int inodoObjetivoId = buscarEnCarpeta(file, sb, inodoPadreOrigenId, nombreElemento);
+        int inodoObjetivoId = buscarEnCarpeta(file, sb, inodoPadreOrigenId, nombreElementoOrigen);
         if(inodoObjetivoId == -1){
             file.close();
             return "Error: el elemento a mover no existe";
         }
 
-        int inodoDestinoId = rastrearRuta(file, sb, destino);
-        if(inodoDestinoId == -1){
-            file.close();
-            return "Error: la ruta destino no existe";
+        int inodoPadreDestinoId = -1;
+        std::string nombreNuevoElemento = nombreElementoOrigen;
+
+        int inodoDestinoDirecto = rastrearRuta(file, sb, destino);
+
+        if (inodoDestinoDirecto != -1) {
+            Inode tempDest;
+            file.seekg(sb.s_inode_start + (inodoDestinoDirecto * sizeof(Inode)), std::ios::beg);
+            file.read(reinterpret_cast<char*>(&tempDest), sizeof(Inode));
+
+            if (tempDest.i_type == '0') {
+                inodoPadreDestinoId = inodoDestinoDirecto; 
+            } else {
+                file.close();
+                return "Error: la ruta destino ya existe y es un archivo.";
+            }
+        } else {
+            std::vector<std::string> tokensDestino;
+            std::stringstream ssD(destino);
+            std::string tD;
+            while(std::getline(ssD, tD, '/')){
+                if(!tD.empty()) tokensDestino.push_back(tD);
+            }
+
+            if (tokensDestino.empty()) {
+                file.close(); return "Error: ruta destino invalida";
+            }
+
+            nombreNuevoElemento = tokensDestino.back();
+            tokensDestino.pop_back();
+
+            std::string rutaPadre = "";
+            for (const std::string& td : tokensDestino) {
+                rutaPadre += "/" + td;
+            }
+            if (rutaPadre.empty()) rutaPadre = "/";
+
+            inodoPadreDestinoId = rastrearRuta(file, sb, rutaPadre);
+
+            if (inodoPadreDestinoId == -1) {
+                file.close();
+                return "Error: la carpeta destino '" + rutaPadre + "' no existe.";
+            }
         }
 
-        Inode inodoPadreOrigen, inodoDestino;
+        Inode inodoPadreOrigen, inodoPadreDestino;
         file.seekg(sb.s_inode_start + (inodoPadreOrigenId * sizeof(Inode)), std::ios::beg);
         file.read(reinterpret_cast<char*>(&inodoPadreOrigen), sizeof(Inode));
         
-        file.seekg(sb.s_inode_start + (inodoDestinoId * sizeof(Inode)), std::ios::beg);
-        file.read(reinterpret_cast<char*>(&inodoDestino), sizeof(Inode));
-
-        if (inodoDestino.i_type != '0'){
-            file.close(); 
-            return "Error: el destino debe ser una carpeta"; 
-        }
+        file.seekg(sb.s_inode_start + (inodoPadreDestinoId * sizeof(Inode)), std::ios::beg);
+        file.read(reinterpret_cast<char*>(&inodoPadreDestino), sizeof(Inode));
         
         if (!tienePermiso(inodoPadreOrigen, 2)){ 
-            file.close(); 
-            return "Error: no tienes permiso de escritura en el origen para desenlazar el archivo"; 
+            file.close(); return "Error: no tienes permiso de escritura en el origen para desenlazar el archivo"; 
         }
-        if (!tienePermiso(inodoDestino, 2)){ 
-            file.close(); 
-            return "Error: no tienes permiso de escritura en el destino para enlazar el archivo"; 
+        if (!tienePermiso(inodoPadreDestino, 2)){ 
+            file.close(); return "Error: no tienes permiso de escritura en el destino para enlazar el archivo"; 
         }
 
-        if(buscarEnCarpeta(file, sb, inodoDestinoId, nombreElemento) != -1){
-            file.close(); return "Error: ya existe un elemento con el nombre '" + nombreElemento + "' en el destino";
+        if(buscarEnCarpeta(file, sb, inodoPadreDestinoId, nombreNuevoElemento) != -1){
+            file.close(); return "Error: ya existe un elemento con el nombre '" + nombreNuevoElemento + "' en el destino";
         }
 
-        if(!agregarEntradaCarpeta(file, sb, inodoDestinoId, nombreElemento, inodoObjetivoId, inicioParticion)){
+        if(!agregarEntradaCarpeta(file, sb, inodoPadreDestinoId, nombreNuevoElemento, inodoObjetivoId, inicioParticion)){
             file.close();
             return "Error: no se pudo agregar el elemento al destino (Bloques llenos)";
         }
 
-        eliminarEntradaCarpeta(file, sb, inodoPadreOrigenId, nombreElemento);
+        eliminarEntradaCarpeta(file, sb, inodoPadreOrigenId, nombreElementoOrigen);
 
         file.seekp(inicioParticion, std::ios::beg);
         file.write(reinterpret_cast<char*>(&sb), sizeof(Superblock));
@@ -100,7 +132,7 @@ public:
 
         Registrar::escribirEnJournal(rutaDisco, inicioParticion, "move", ruta, destino);
 
-        return "Elemento '" + nombreElemento + "' movido exitosamente hacia '" + destino + "'";
+        return "Elemento '" + nombreElementoOrigen + "' movido exitosamente como '" + nombreNuevoElemento + "'.";
     }
 
 private:

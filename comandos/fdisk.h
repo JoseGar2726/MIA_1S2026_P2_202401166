@@ -349,41 +349,89 @@ namespace ComandoFdisk {
         file.read(reinterpret_cast<char*>(&mbr), sizeof(MBR));
 
         int indiceParticion = -1;
+        int indiceExtendida = -1;
+
         for(int i = 0; i < 4; i++){
-            if(mbr.mbr_partitions[i].part_status == '1' && std::string(mbr.mbr_partitions[i].part_name) == name){
-                indiceParticion = i;
-                break;
+            if(mbr.mbr_partitions[i].part_status == '1'){
+                if(std::string(mbr.mbr_partitions[i].part_name) == name){
+                    indiceParticion = i;
+                    break;
+                }
+                if(mbr.mbr_partitions[i].part_type == 'E'){
+                    indiceExtendida = i;
+                }
             }
         }
 
-        if(indiceParticion == -1) {
-            file.close();
-            return "Error: La particion '" + name + "' no existe para eliminar.";
-        }
+        if(indiceParticion != -1) {
+            std::string resultado = "Advertencia: Eliminando particion '" + name + "'.\n";
 
-        std::string resultado = "Advertencia: Eliminando particion '" + name + "'.\n";
-
-        if(tipoDelete == "fast"){
-            mbr.mbr_partitions[indiceParticion].part_status = '0';
-            resultado += "Eliminacion FAST completada.";
-        } else if (tipoDelete == "full"){
-            mbr.mbr_partitions[indiceParticion].part_status = '0';
-            file.seekp(mbr.mbr_partitions[indiceParticion].part_start, std::ios::beg);
-            char zero = '\0';
-            for(int i = 0; i < mbr.mbr_partitions[indiceParticion].part_size; i++){
-                file.write(&zero, 1);
+            if(tipoDelete == "fast"){
+                mbr.mbr_partitions[indiceParticion].part_status = '0';
+                resultado += "Eliminacion FAST completada.";
+            } else if (tipoDelete == "full"){
+                mbr.mbr_partitions[indiceParticion].part_status = '0';
+                file.seekp(mbr.mbr_partitions[indiceParticion].part_start, std::ios::beg);
+                char zero = '\0';
+                for(int i = 0; i < mbr.mbr_partitions[indiceParticion].part_size; i++){
+                    file.write(&zero, 1);
+                }
+                resultado += "Eliminacion FULL completada (Espacio limpiado con ceros).";
+            } else{
+                file.close();
+                return "Error: Parametro -delete='" + tipoDelete + "' invalido. Use 'fast' o 'full'.";
             }
-            resultado += "Eliminacion FULL completada (Espacio limpiado con ceros).";
-        } else{
+
+            file.seekp(0, std::ios::beg);
+            file.write(reinterpret_cast<char*>(&mbr), sizeof(MBR));
             file.close();
-            return "Error: Parametro -delete='" + tipoDelete + "' invalido. Use 'fast' o 'full'.";
+
+            return resultado;
         }
 
-        file.seekp(0, std::ios::beg);
-        file.write(reinterpret_cast<char*>(&mbr), sizeof(MBR));
+        if (indiceExtendida != -1) {
+            int currentEBRPos = mbr.mbr_partitions[indiceExtendida].part_start;
+            EBR currentEBR;
+
+            while (true) {
+                file.seekg(currentEBRPos, std::ios::beg);
+                file.read(reinterpret_cast<char*>(&currentEBR), sizeof(EBR));
+
+                if (currentEBR.part_status == '1' && std::string(currentEBR.part_name) == name) {
+                    std::string resultado = "Advertencia: Eliminando particion logica '" + name + "'.\n";
+                    
+                    currentEBR.part_status = '0';
+
+                    if(tipoDelete == "fast"){
+                        resultado += "Eliminacion FAST completada.";
+                    } else if (tipoDelete == "full"){
+                        file.seekp(currentEBR.part_start, std::ios::beg);
+                        char zero = '\0';
+                        for(int i = 0; i < currentEBR.part_size; i++){
+                            file.write(&zero, 1);
+                        }
+                        resultado += "Eliminacion FULL completada (Espacio limpiado con ceros).";
+                    } else{
+                        file.close();
+                        return "Error: Parametro -delete='" + tipoDelete + "' invalido. Use 'fast' o 'full'.";
+                    }
+
+                    file.seekp(currentEBRPos, std::ios::beg);
+                    file.write(reinterpret_cast<char*>(&currentEBR), sizeof(EBR));
+                    file.close();
+
+                    return resultado;
+                }
+
+                if (currentEBR.part_next == -1) {
+                    break;
+                }
+                currentEBRPos = currentEBR.part_next;
+            }
+        }
+
         file.close();
-
-        return resultado;
+        return "Error: La particion '" + name + "' no existe para eliminar.";
     }
 
     static std::string modificarEspacio(const std::string& ruta, const std::string& name, int adicionEnBytes){

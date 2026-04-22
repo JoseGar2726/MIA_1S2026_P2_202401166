@@ -36,40 +36,73 @@ public:
             return "Error: la ruta origen '" + ruta + "' no existe";
         }
 
-        int inodoDestinoId = rastrearRuta(file, sb, destino);
-        if(inodoDestinoId == -1){
-            file.close();
-            return "Error: la ruta destino '" + destino + "' no existe";
-        }
-
-        Inode inodoDestino;
-        file.seekg(sb.s_inode_start + (inodoDestinoId * sizeof(Inode)), std::ios::beg);
-        file.read(reinterpret_cast<char*>(&inodoDestino), sizeof(Inode));
-
-        if (inodoDestino.i_type != '0') {
-            file.close();
-            return "Error: la ruta destino debe ser una carpeta";
-        }
-
-        if (!tienePermiso(inodoDestino, 2)) {
-            file.close();
-            return "Error: el usuario no tiene permisos de escritura en la ruta destino";
-        }
-
         std::vector<std::string> carpetasOrigen;
-        std::stringstream ss(ruta);
-        std::string token;
-        while(std::getline(ss, token, '/')){
-            if(!token.empty()) carpetasOrigen.push_back(token);
+        std::stringstream ssO(ruta);
+        std::string tokenO;
+        while(std::getline(ssO, tokenO, '/')){
+            if(!tokenO.empty()) carpetasOrigen.push_back(tokenO);
         }
-        std::string nombreElemento = carpetasOrigen.back();
+        std::string nombreNuevoElemento = carpetasOrigen.back();
 
-        if(buscarEnCarpeta(file, sb, inodoDestinoId, nombreElemento) != -1){
+
+        int inodoPadreDestinoId = -1;
+        int inodoDestinoDirecto = rastrearRuta(file, sb, destino);
+
+        if (inodoDestinoDirecto != -1) {
+            Inode tempDest;
+            file.seekg(sb.s_inode_start + (inodoDestinoDirecto * sizeof(Inode)), std::ios::beg);
+            file.read(reinterpret_cast<char*>(&tempDest), sizeof(Inode));
+
+            if (tempDest.i_type == '0') {
+                inodoPadreDestinoId = inodoDestinoDirecto;
+            } else {
+                file.close();
+                return "Error: la ruta destino ya existe y es un archivo, no una carpeta.";
+            }
+        } else {
+            std::vector<std::string> tokensDestino;
+            std::stringstream ssD(destino);
+            std::string tD;
+            while(std::getline(ssD, tD, '/')){
+                if(!tD.empty()) tokensDestino.push_back(tD);
+            }
+
+            if (tokensDestino.empty()) {
+                file.close(); return "Error: ruta destino invalida";
+            }
+
+            nombreNuevoElemento = tokensDestino.back();
+            tokensDestino.pop_back();
+
+            std::string rutaPadre = "";
+            for (const std::string& td : tokensDestino) {
+                rutaPadre += "/" + td;
+            }
+            if (rutaPadre.empty()) rutaPadre = "/";
+
+            inodoPadreDestinoId = rastrearRuta(file, sb, rutaPadre);
+
+            if (inodoPadreDestinoId == -1) {
+                file.close();
+                return "Error: la carpeta destino '" + rutaPadre + "' no existe.";
+            }
+        }
+
+        Inode inodoPadreDestino;
+        file.seekg(sb.s_inode_start + (inodoPadreDestinoId * sizeof(Inode)), std::ios::beg);
+        file.read(reinterpret_cast<char*>(&inodoPadreDestino), sizeof(Inode));
+
+        if (!tienePermiso(inodoPadreDestino, 2)) {
             file.close();
-            return "Error: ya existe un elemento llamado '" + nombreElemento + "' en el destino";
+            return "Error: el usuario no tiene permisos de escritura en la carpeta destino";
         }
 
-        if(!copiarRecursivo(file, sb, inodoOrigenId, inodoDestinoId, nombreElemento, inicioParticion)){
+        if(buscarEnCarpeta(file, sb, inodoPadreDestinoId, nombreNuevoElemento) != -1){
+            file.close();
+            return "Error: ya existe un elemento llamado '" + nombreNuevoElemento + "' en el destino";
+        }
+
+        if(!copiarRecursivo(file, sb, inodoOrigenId, inodoPadreDestinoId, nombreNuevoElemento, inicioParticion)){
             file.close();
             return "Error: disco lleno o fallo al copiar";
         }
@@ -78,7 +111,7 @@ public:
 
         Registrar::escribirEnJournal(rutaDisco, inicioParticion, "copy", ruta, destino);
 
-        return "Copia de '" + nombreElemento + "' realizada exitosamente hacia '" + destino + "'";
+        return "Copia de '" + nombreNuevoElemento + "' realizada exitosamente hacia el destino.";
     }
 
 private:
