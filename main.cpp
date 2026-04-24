@@ -1118,10 +1118,10 @@ int main(int argc, char* argv[]) {
     std::cout << "==========================================" << std::endl;
     std::cout << "C++ DISK - SERVIDOR ACTIVO" << std::endl;
     std::cout << "MIA Proyecto 2 - 2026" << std::endl;
-    std::cout << "Escuchando en http://localhost:8080" << std::endl;
+    std::cout << "Escuchando en http://0.0.0.0:8080" << std::endl;
     std::cout << "==========================================" << std::endl;
     
-    app.port(8080).multithreaded().run();
+    app.port(8080).bindaddr("0.0.0.0").multithreaded().run();
 
     return 0;
 }

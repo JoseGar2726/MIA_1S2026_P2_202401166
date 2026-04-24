@@ -54,57 +54,76 @@ function App() {
 
   const cargarDiscos = async () => {
     const respuesta = await enviarPeticion("mounted");
-    
     let lineas = respuesta.split('\n').map(l => l.trim()).filter(l => l !== '');
     
     if (lineas.length === 0 || respuesta.toLowerCase().includes("error") || respuesta.includes("No hay")) {
       setDiscosMontados({});
       return;
     }
-
+  
     const discosAgrupados = {};
-    
-    let currentID = "";
-    let currentDisco = "";
-    let currentParticion = "";
-
+    let currentDiscoNombre = "";
+  
     lineas.forEach(linea => {
-      if (linea.startsWith("ID:")) {
-        currentID = linea.replace("ID:", "").trim();
-      } 
-      else if (linea.startsWith("Disco:")) {
-        const rutaCompleta = linea.replace("Disco:", "").trim();
-        const partes = rutaCompleta.split("/");
-        currentDisco = partes[partes.length - 1];
-      } 
-      else if (linea.startsWith("Partición:") || linea.startsWith("Particion:")) {
-        currentParticion = linea.substring(linea.indexOf(":") + 1).trim();
-      } 
-      else if (linea === "---") {
-        if (currentID && currentDisco) {
-          if (!discosAgrupados[currentDisco]) {
-            discosAgrupados[currentDisco] = [];
-          }
-          discosAgrupados[currentDisco].push(`ID: ${currentID} | ${currentParticion}`);
+      if (linea.startsWith("Disco:")) {
+        const partes = linea.split('|').map(p => p.trim());
+        const rutaCompleta = partes[0].replace("Disco:", "").trim();
+        const nombreDisco = rutaCompleta.split("/").pop();
+        
+        currentDiscoNombre = nombreDisco;
+        
+        const capacidad = partes.find(p => p.includes("Capacidad:"))?.split(":")[1].trim() || "N/A";
+        const fit = partes.find(p => p.includes("Fit:"))?.split(":")[1].trim() || "N/A";
+  
+        if (!discosAgrupados[nombreDisco]) {
+          discosAgrupados[nombreDisco] = { 
+            nombre: nombreDisco, 
+            capacidad, 
+            fit, 
+            particiones: [], 
+            conteoMontadas: 0,
+            conteoDesmontadas: 0
+          };
         }
-        currentID = ""; currentDisco = ""; currentParticion = "";
+      } 
+      else if (linea.startsWith("Particion:") || linea.startsWith("Partición:")) {
+        const partes = linea.split('|').map(p => p.trim());
+        const nombrePart = partes[0].split(":")[1].trim();
+        const size = partes.find(p => p.includes("Tamaño:"))?.split(":")[1].trim() || "N/A";
+        const fitPart = partes.find(p => p.includes("Fit:"))?.split(":")[1].trim() || "N/A";
+        const estado = partes.find(p => p.includes("Estado:"))?.split(":")[1].trim() || "N/A";
+        
+        // 💡 AQUÍ ESTABA EL BUG: Volvemos a extraer el ID correctamente
+        const idPart = partes.find(p => p.includes("ID:"))?.split(":")[1].trim() || "N/A";
+  
+        if (currentDiscoNombre && discosAgrupados[currentDiscoNombre]) {
+          // Cambiamos la validación para que busque por NOMBRE en lugar de ID
+          const existe = discosAgrupados[currentDiscoNombre].particiones.some(p => p.nombre === nombrePart);
+          
+          if (!existe) {
+            discosAgrupados[currentDiscoNombre].particiones.push({
+              id: idPart,
+              nombre: nombrePart,
+              size,
+              fit: fitPart,
+              estado
+            });
+            
+            if (estado === "Montada") {
+               discosAgrupados[currentDiscoNombre].conteoMontadas += 1;
+            } else {
+               discosAgrupados[currentDiscoNombre].conteoDesmontadas += 1;
+            }
+          }
+        }
       }
     });
-
-    if (currentID && currentDisco && currentParticion) {
-        if (!discosAgrupados[currentDisco]) {
-            discosAgrupados[currentDisco] = [];
-        }
-        if (!discosAgrupados[currentDisco].includes(`ID: ${currentID} | ${currentParticion}`)) {
-            discosAgrupados[currentDisco].push(`ID: ${currentID} | ${currentParticion}`);
-        }
-    }
-
+  
     setDiscosMontados(discosAgrupados);
   };
 
   const cargarArchivosDeRuta = async (ruta) => {
-    const idParticion = particionSeleccionada.split('|')[0].replace('ID:', '').trim();
+    const idParticion = particionSeleccionada.id;
 
     try {
       const response = await fetch('http://localhost:8080/explorar', {
@@ -157,13 +176,40 @@ function App() {
       .filter(linea => linea !== '')
       .join('\n');
 
-    if (!lineasValidas) {
-      return setSalida("No hay comandos válidos para ejecutar (solo habían comentarios o líneas vacías).");
-    }
-
     setSalida("Ejecutando...");
     
-    const respuesta = await enviarPeticion(lineasValidas);
+    let respuesta = await enviarPeticion(lineasValidas);
+    
+    if (lineasValidas.toLowerCase() === "mounted") {
+      let lineas = respuesta.split('\n');
+      let filtrado = [];
+      let cacheDisco = [];
+      let tieneMontadas = false;
+
+      lineas.forEach(linea => {
+        if (linea.startsWith("ID:") || linea.startsWith("Disco:")) {
+          cacheDisco.push(linea);
+        } else if (linea.startsWith("Particion:") || linea.startsWith("Partición:")) {
+          if (linea.includes("Estado: Montada")) {
+            if (!tieneMontadas) {
+              filtrado.push(...cacheDisco);
+              tieneMontadas = true;
+            }
+            filtrado.push(linea);
+          }
+        } else if (linea === "---") {
+          if (tieneMontadas) filtrado.push(linea);
+          cacheDisco = [];
+          tieneMontadas = false;
+        } else {
+          filtrado.push(linea);
+        }
+      });
+      
+      respuesta = filtrado.join('\n');
+      if (filtrado.length <= 3) respuesta = "No hay particiones montadas";
+    }
+
     setSalida(respuesta);
   };
 
@@ -204,13 +250,12 @@ function App() {
 
   const procesarLogout = async () => {
     try {
-      const response = await fetch('http://localhost:8080/logout', { 
+      await fetch('http://localhost:8080/logout', { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify({}) 
       });
-      const data = await response.json();
-      alert(data.respuesta);
+      alert("Sesión cerrada.");
     } catch (error) { 
       console.warn("Backend no respondió, forzando cierre de sesión local."); 
     } finally {
@@ -222,9 +267,9 @@ function App() {
     }
   };
 
-  const abrirArchivo = async (nombreArchivo) => {
-    const idParticion = particionSeleccionada.split('|')[0].replace('ID:', '').trim();
-    const rutaCompleta = rutaActual === '/' ? `/${nombreArchivo}` : `${rutaActual}/${nombreArchivo}`;
+  const abrirArchivo = async (nombreArchivo, rutaForzada = null) => {
+    const idParticion = particionSeleccionada.id;
+    const rutaCompleta = rutaForzada ? rutaForzada : (rutaActual === '/' ? `/${nombreArchivo}` : `${rutaActual}/${nombreArchivo}`);
 
     try {
       const response = await fetch('http://localhost:8080/leer_archivo', {
@@ -240,9 +285,31 @@ function App() {
       } else {
         setArchivoAbierto(nombreArchivo);
         setTextoArchivo(data.contenido);
+        setRutaEditada(rutaCompleta); 
       }
     } catch (error) {
       alert("Error crítico al leer el archivo.");
+    }
+  };
+
+  const manejarNavegacion = () => {
+    let nuevaRuta = rutaEditada.trim();
+    if (!nuevaRuta.startsWith('/')) nuevaRuta = '/' + nuevaRuta;
+    if (nuevaRuta.endsWith('/') && nuevaRuta !== '/') nuevaRuta = nuevaRuta.slice(0, -1);
+    
+    const partes = nuevaRuta.split('/');
+    const ultimoSegmento = partes[partes.length - 1];
+
+    if (ultimoSegmento.includes('.')) {
+      partes.pop(); 
+      let rutaPadre = partes.join('/');
+      if (rutaPadre === '') rutaPadre = '/';
+      
+      setRutaActual(rutaPadre);
+      abrirArchivo(ultimoSegmento, nuevaRuta);
+    } else {
+      setRutaActual(nuevaRuta);
+      setArchivoAbierto(null);
     }
   };
 
@@ -293,14 +360,22 @@ function App() {
               <button className="btn-nav" style={{ marginBottom: '20px' }} onClick={cargarDiscos}>↻ Refrescar Discos</button>
               <div className="card-grid">
                 {Object.keys(discosMontados).length > 0 ? (
-                  Object.keys(discosMontados).map((nombreDisco, index) => (
-                    <div key={index} className="disk-card" onClick={() => setDiscoSeleccionado(nombreDisco)}>
+                  Object.values(discosMontados).map((disco, index) => (
+                    <div key={index} className="disk-card" onClick={() => setDiscoSeleccionado(disco.nombre)}>
                       <div className="disk-icon">🖴</div>
-                      <p style={{ fontWeight: 'bold' }}>{nombreDisco}</p>
-                      <p style={{ fontSize: '12px', color: '#888' }}>{discosMontados[nombreDisco].length} Partición(es)</p>
+                      <p style={{ fontWeight: 'bold', fontSize: '16px' }}>{disco.nombre}</p>
+                      <div style={{ fontSize: '12px', color: '#aaa', marginTop: '10px', textAlign: 'left' }}>
+                        <p>📏 <b>Capacidad:</b> {disco.capacidad}</p>
+                        <p>⚙️ <b>Ajuste (Fit):</b> {disco.fit}</p>
+                        {/* 💡 NUEVO: Contadores separados */}
+                        <p>🟢 <b>Montadas:</b> {disco.conteoMontadas}</p>
+                        <p>🔴 <b>Desmontadas:</b> {disco.conteoDesmontadas}</p>
+                      </div>
                     </div>
                   ))
-                ) : <p style={{ color: '#aaa' }}>No hay discos montados.</p>}
+                ) : (
+                  <p style={{ color: '#aaa' }}>No hay discos montados.</p>
+                )}
               </div>
             </>
           )}
@@ -310,10 +385,29 @@ function App() {
               <button className="btn-nav" style={{ marginBottom: '20px', backgroundColor: '#555' }} onClick={() => setDiscoSeleccionado(null)}>← Volver a Discos</button>
               <h2>Particiones en: <span style={{ color: '#00ff00' }}>{discoSeleccionado}</span></h2>
               <div className="card-grid">
-                {discosMontados[discoSeleccionado].map((infoParticion, index) => (
-                  <div key={index} className="disk-card" onClick={() => { setParticionSeleccionada(infoParticion); setRutaActual('/'); }} style={{ borderColor: '#007acc' }}>
+                {discosMontados[discoSeleccionado].particiones.map((part, index) => (
+                  <div key={index} className="disk-card" onClick={() => { 
+                    if (part.estado === "Desmontada") {
+                      alert("🔒 Debes montar la partición primero para poder explorarla.");
+                      return;
+                    }
+                    setParticionSeleccionada(part); 
+                    setRutaActual('/'); 
+                  }} 
+                  style={{ 
+                    borderColor: part.estado === 'Montada' ? '#007acc' : '#555', 
+                    opacity: part.estado === 'Montada' ? 1 : 0.5 
+                  }}>
                     <div className="disk-icon">🗂️</div>
-                    <p style={{ fontSize: '11px', wordWrap: 'break-word' }}>{infoParticion}</p>
+                    <p style={{ fontWeight: 'bold' }}>{part.nombre}</p>
+                    <div style={{ fontSize: '11px', color: '#aaa', marginTop: '5px', textAlign: 'left' }}>
+                      <p>🆔 <b>ID:</b> {part.id}</p>
+                      <p>📏 <b>Tamaño:</b> {part.size}</p>
+                      <p>⚙️ <b>Fit:</b> {part.fit}</p>
+                      <p style={{ color: part.estado === 'Montada' ? '#4CAF50' : '#f44336' }}>
+                        {part.estado === 'Montada' ? '🟢' : '🔴'} <b>Estado:</b> {part.estado}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -334,6 +428,7 @@ function App() {
                 <button className="btn-nav" onClick={() => {
                   if (archivoAbierto) {
                     setArchivoAbierto(null);
+                    setRutaEditada(rutaActual);
                   } else {
                     subirDeNivel();
                   }
@@ -347,14 +442,7 @@ function App() {
                     value={rutaEditada}
                     onChange={(e) => setRutaEditada(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        let nuevaRuta = rutaEditada.trim();
-                        if (!nuevaRuta.startsWith('/')) nuevaRuta = '/' + nuevaRuta;
-                        if (nuevaRuta.endsWith('/') && nuevaRuta !== '/') nuevaRuta = nuevaRuta.slice(0, -1);
-                        
-                        setRutaActual(nuevaRuta);
-                        setArchivoAbierto(null);
-                      }
+                      if (e.key === 'Enter') manejarNavegacion(); 
                     }}
                     style={{ 
                       flex: 1, 
@@ -371,14 +459,7 @@ function App() {
                   <button 
                     className="btn-nav" 
                     style={{ backgroundColor: '#4CAF50', marginLeft: '10px', padding: '10px 15px' }}
-                    onClick={() => {
-                        let nuevaRuta = rutaEditada.trim();
-                        if (!nuevaRuta.startsWith('/')) nuevaRuta = '/' + nuevaRuta;
-                        if (nuevaRuta.endsWith('/') && nuevaRuta !== '/') nuevaRuta = nuevaRuta.slice(0, -1);
-                        
-                        setRutaActual(nuevaRuta);
-                        setArchivoAbierto(null);
-                    }}
+                    onClick={manejarNavegacion}
                   >
                     Ir ➔
                   </button>
