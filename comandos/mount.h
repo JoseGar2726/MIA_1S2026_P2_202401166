@@ -238,24 +238,32 @@ namespace ComandoMount {
         
         return result.str();
     }
+
+    static std::vector<std::string> discosFisicosConocidos;
+
+    inline void registrarDiscoFisico(const std::string& ruta) {
+        if (std::find(discosFisicosConocidos.begin(), discosFisicosConocidos.end(), ruta) == discosFisicosConocidos.end()) {
+            discosFisicosConocidos.push_back(ruta);
+        }
+    }
+    
+    inline void eliminarDiscoFisico(const std::string& ruta) {
+        auto it = std::find(discosFisicosConocidos.begin(), discosFisicosConocidos.end(), ruta);
+        if (it != discosFisicosConocidos.end()) {
+            discosFisicosConocidos.erase(it);
+        }
+    }
     
     inline std::string listMountedPartitions() {
-        if (particionesMontadas.empty()) {
-            return "No hay particiones montadas";
+        if (discosFisicosConocidos.empty()) {
+            return "No hay discos reconocidos en el sistema";
         }
         
         std::ostringstream result;
         result << "\n=== PARTICIONES MONTADAS ===\n";
         
-        std::vector<std::string> discosProcesados;
-        
-        for (const auto& [idMontaje, partition] : particionesMontadas) {
-            if (std::find(discosProcesados.begin(), discosProcesados.end(), partition.ruta) != discosProcesados.end()) {
-                continue;
-            }
-            discosProcesados.push_back(partition.ruta);
-            
-            std::ifstream file(partition.ruta, std::ios::binary);
+        for (const std::string& rutaDisco : discosFisicosConocidos) {
+            std::ifstream file(rutaDisco, std::ios::binary);
             if (!file.is_open()) continue;
             
             MBR mbr;
@@ -263,10 +271,13 @@ namespace ComandoMount {
             std::string discoCapacidad = std::to_string(mbr.mbr_size / (1024 * 1024)) + "MB";
             std::string discoFit = (mbr.disk_fit == 'F' ? "FF" : (mbr.disk_fit == 'B' ? "BF" : "WF"));
             
-            result << "Disco: " << partition.ruta << " | Capacidad: " << discoCapacidad << " | Fit: " << discoFit << "\n";
+            result << "Disco: " << rutaDisco << " | Capacidad: " << discoCapacidad << " | Fit: " << discoFit << "\n";
+            
+            bool tieneParticiones = false;
             
             for (int i = 0; i < 4; i++) {
                 if (mbr.mbr_partitions[i].part_status == '1') {
+                    tieneParticiones = true;
                     std::string pName(mbr.mbr_partitions[i].part_name);
                     pName.erase(std::remove_if(pName.begin(), pName.end(), ::isspace), pName.end());
                     pName.erase(std::find(pName.begin(), pName.end(), '\0'), pName.end());
@@ -277,7 +288,7 @@ namespace ComandoMount {
                     std::string estado = "Desmontada";
                     std::string pID = "N/A";
                     for (const auto& [idM, pM] : particionesMontadas) {
-                        if (pM.ruta == partition.ruta && pM.nombre == pName) {
+                        if (pM.ruta == rutaDisco && pM.nombre == pName) {
                             estado = "Montada"; pID = idM; break;
                         }
                     }
@@ -302,7 +313,7 @@ namespace ComandoMount {
                                 std::string eEstado = "Desmontada";
                                 std::string eID = "N/A";
                                 for (const auto& [idM, pM] : particionesMontadas) {
-                                    if (pM.ruta == partition.ruta && pM.nombre == ebrName) {
+                                    if (pM.ruta == rutaDisco && pM.nombre == ebrName) {
                                         eEstado = "Montada"; eID = idM; break;
                                     }
                                 }
@@ -313,6 +324,11 @@ namespace ComandoMount {
                     }
                 }
             }
+            
+            if (!tieneParticiones) {
+                result << "Particion: Sin particiones creadas | Tamaño: 0MB | Fit: N/A | Estado: N/A | ID: N/A\n";
+            }
+            
             file.close();
             result << "---\n";
         }

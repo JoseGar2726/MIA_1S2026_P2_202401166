@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <algorithm>
 #include "../estructuras/structures.h"
+#include "mount.h"
 
 class DiskManager {
 private:
@@ -118,6 +119,8 @@ public:
             diskFile.write(reinterpret_cast<char*>(&mbr), sizeof(MBR));
             diskFile.close();
 
+            ComandoMount::registrarDiscoFisico(path);
+
             char timeStr[26];
             struct tm* timeinfo = localtime(&mbr.mbr_creation_date);
             strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", timeinfo);
@@ -148,6 +151,8 @@ public:
             MBR mbr;
             diskFile.read(reinterpret_cast<char*>(&mbr), sizeof(MBR));
             diskFile.close();
+
+            ComandoMount::eliminarDiscoFisico(path);
 
             char timeStr[26];
             struct tm* timeinfo = localtime(&mbr.mbr_creation_date);

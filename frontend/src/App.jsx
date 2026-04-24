@@ -69,17 +69,13 @@ function App() {
         const partes = linea.split('|').map(p => p.trim());
         const rutaCompleta = partes[0].replace("Disco:", "").trim();
         const nombreDisco = rutaCompleta.split("/").pop();
-        
         currentDiscoNombre = nombreDisco;
         
-        const capacidad = partes.find(p => p.includes("Capacidad:"))?.split(":")[1].trim() || "N/A";
-        const fit = partes.find(p => p.includes("Fit:"))?.split(":")[1].trim() || "N/A";
-  
         if (!discosAgrupados[nombreDisco]) {
           discosAgrupados[nombreDisco] = { 
             nombre: nombreDisco, 
-            capacidad, 
-            fit, 
+            capacidad: partes.find(p => p.includes("Capacidad:"))?.split(":")[1].trim() || "N/A", 
+            fit: partes.find(p => p.includes("Fit:"))?.split(":")[1].trim() || "N/A", 
             particiones: [], 
             conteoMontadas: 0,
             conteoDesmontadas: 0
@@ -89,36 +85,25 @@ function App() {
       else if (linea.startsWith("Particion:") || linea.startsWith("Partición:")) {
         const partes = linea.split('|').map(p => p.trim());
         const nombrePart = partes[0].split(":")[1].trim();
-        const size = partes.find(p => p.includes("Tamaño:"))?.split(":")[1].trim() || "N/A";
-        const fitPart = partes.find(p => p.includes("Fit:"))?.split(":")[1].trim() || "N/A";
-        const estado = partes.find(p => p.includes("Estado:"))?.split(":")[1].trim() || "N/A";
         
-        // 💡 AQUÍ ESTABA EL BUG: Volvemos a extraer el ID correctamente
-        const idPart = partes.find(p => p.includes("ID:"))?.split(":")[1].trim() || "N/A";
+        if (nombrePart === "Sin particiones creadas") return;
+
+        const estado = partes.find(p => p.includes("Estado:"))?.split(":")[1].trim() || "Desmontada";
   
         if (currentDiscoNombre && discosAgrupados[currentDiscoNombre]) {
-          // Cambiamos la validación para que busque por NOMBRE en lugar de ID
-          const existe = discosAgrupados[currentDiscoNombre].particiones.some(p => p.nombre === nombrePart);
+          discosAgrupados[currentDiscoNombre].particiones.push({
+            id: partes.find(p => p.includes("ID:"))?.split(":")[1].trim() || "N/A",
+            nombre: nombrePart,
+            size: partes.find(p => p.includes("Tamaño:"))?.split(":")[1].trim() || "N/A",
+            fit: partes.find(p => p.includes("Fit:"))?.split(":")[1].trim() || "N/A",
+            estado: estado
+          });
           
-          if (!existe) {
-            discosAgrupados[currentDiscoNombre].particiones.push({
-              id: idPart,
-              nombre: nombrePart,
-              size,
-              fit: fitPart,
-              estado
-            });
-            
-            if (estado === "Montada") {
-               discosAgrupados[currentDiscoNombre].conteoMontadas += 1;
-            } else {
-               discosAgrupados[currentDiscoNombre].conteoDesmontadas += 1;
-            }
-          }
+          if (estado === "Montada") discosAgrupados[currentDiscoNombre].conteoMontadas += 1;
+          else discosAgrupados[currentDiscoNombre].conteoDesmontadas += 1;
         }
       }
     });
-  
     setDiscosMontados(discosAgrupados);
   };
 
